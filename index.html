@@ -81,6 +81,7 @@
 <label>หมายเหตุ</label>
 <input id="note" placeholder="(ถ้ามี)">
 
+<div class="small" id="upstat"></div>
 <div class="small" id="gps">📍 กำลังหาตำแหน่ง…</div>
 <button id="send" disabled>บันทึก</button>
 <div id="msg"></div>
@@ -121,8 +122,11 @@ function preview(inputId, boxId, arr, cntId){
   document.getElementById(inputId).addEventListener('change', async e=>{
     const picked=[...e.target.files]; e.target.value='';
     for(const f of picked){
-      if(inputId==='photo1'){ const ok = await checkLabelPhoto(f); if(!ok) continue; }
-      f.b64 = shrink(f); // ย่อรูปล่วงหน้าทันที
+      let code='';
+      if(inputId==='photo1'){ code = await checkLabelPhoto(f); if(!code) continue; }
+      f.group = inputId==='photo1' ? 'item' : 'receipt';
+      f.label = code===true ? '' : code;
+      f.upload = uploadNow(f); // อัปโหลดเบื้องหลังทันที
       arr.push(f);
     }
     render();
@@ -140,7 +144,7 @@ async function checkLabelPhoto(file){
   if(!code){
     msg.textContent='❌ ไม่เห็นบาร์โค้ดใบปะหน้าในรูป กรุณาถ่ายใหม่ให้ชัด (ถ้าแน่ใจว่าเห็นชัด กดยืนยันได้)';
     if(navigator.vibrate) navigator.vibrate([60,60,60]);
-    return confirm('อ่านบาร์โค้ดจากรูปไม่ได้\nถ่ายใหม่ให้เห็นใบปะหน้าชัดเจน\n\nยืนยันใช้รูปนี้อยู่ดี?');
+    return confirm('อ่านบาร์โค้ดจากรูปไม่ได้\nถ่ายใหม่ให้เห็นใบปะหน้าชัดเจน\n\nยืนยันใช้รูปนี้อยู่ดี?') ? true : false;
   }
   const list = ta.value.split(/\n/).map(s=>s.trim()).filter(Boolean);
   if(!list.includes(code)){
@@ -150,7 +154,21 @@ async function checkLabelPhoto(file){
   } else {
     msg.textContent='✅ ใบปะหน้าชัด ตรงกับ '+code;
   }
-  return true;
+  return code;
+}
+
+// อัปโหลดรูป 1 ใบไป Drive ทันที คืน URL
+let pendingUploads=0;
+function upStatus(){ const el=document.getElementById('upstat'); el.textContent = pendingUploads>0 ? `⬆️ กำลังอัปโหลดรูป ${pendingUploads} รูป…` : ''; }
+async function uploadNow(f){
+  pendingUploads++; upStatus();
+  try{
+    const data = await shrink(f);
+    const r = await fetch(GAS_URL,{method:'POST',body:JSON.stringify({action:'upload', group:f.group, label:f.label||'', carrier:document.getElementById('carrier').value, data})});
+    const j = await r.json(); if(!j.ok) throw new Error(j.error);
+    return j.url;
+  }catch(e){ f.failed=true; return null; }
+  finally{ pendingUploads--; upStatus(); }
 }
 preview('photo1','prev1',files1,'cnt1'); preview('photo2','prev2',files2); preview('photo3','prev3',files3);
 document.querySelectorAll('input[name=scanned]').forEach(r=>r.addEventListener('change',e=>{
@@ -230,12 +248,15 @@ document.getElementById('send').onclick = async ()=>{
   if(!scanned && !document.getElementById('confirmCount').checked){ msg.textContent=`⚠️ ติ๊กยืนยันว่ารูปเห็นครบ ${nTrack} ชิ้น`; return; }
   if(scanning){ try{ await scanner.stop(); }catch(_){} document.getElementById('scanner').classList.remove('on'); scanning=false; }
   btn.disabled=true; msg.textContent='⏳ กำลังส่ง…';
-  const photos=[];
-  for(const f of f1) photos.push({type:'image/jpeg', group:'item', data: await (f.b64||shrink(f))});
-  for(const f of (scanned?f2:files3)) photos.push({type:'image/jpeg', group:'receipt', data: await (f.b64||shrink(f))});
+  // รอรูปที่อัปโหลดค้าง (ปกติเสร็จแล้ว) รูปที่ล้มเหลวส่งซ้ำ
+  const finalFiles = scanned?f2:files3;
+  const getUrl = async f => { let u = await f.upload; if(!u){ f.upload = uploadNow(f); u = await f.upload; } return u; };
+  const itemLinks = await Promise.all(f1.map(getUrl));
+  const receiptLinks = await Promise.all(finalFiles.map(getUrl));
+  if(itemLinks.includes(null)||receiptLinks.includes(null)){ msg.textContent='❌ อัปโหลดรูปไม่สำเร็จ ลองกดบันทึกอีกครั้ง'; btn.disabled=false; return; }
   const body={name:profile.displayName, userId:profile.userId,
     carrier, branch:document.getElementById('branch').value,
-    tracking, scanned, staff, note:document.getElementById('note').value, lat:pos?.lat, lng:pos?.lng, photos};
+    tracking, scanned, staff, note:document.getElementById('note').value, lat:pos?.lat, lng:pos?.lng, itemLinks, receiptLinks};
   try{
     const r=await fetch(GAS_URL,{method:'POST',body:JSON.stringify(body)});
     const j=await r.json();
