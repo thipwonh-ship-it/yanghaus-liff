@@ -116,7 +116,7 @@ function preview(inputId, boxId, arr, cntId){
   function render(){
     box.innerHTML='';
     arr.forEach((f,i)=>{ const img=document.createElement('img'); img.src=URL.createObjectURL(f);
-      img.onclick=()=>{ if(confirm('ลบรูปนี้?')){ arr.splice(i,1); render(); } }; box.appendChild(img); });
+      img.onclick=()=>{ if(confirm('ลบรูปนี้?'+(f.label?'\n(เลข '+f.label+' จะถูกลบด้วย)':''))){ arr.splice(i,1); if(f.label) removeCode(f.label); render(); } }; box.appendChild(img); });
     if(cntId) document.getElementById(cntId).textContent = arr.length ? `${arr.length} รูป` : '';
   }
   document.getElementById(inputId).addEventListener('change', async e=>{
@@ -191,6 +191,12 @@ function addCode(code){
   const chip=document.createElement('span'); chip.className='chip'; chip.textContent='✔ '+code;
   document.getElementById('scanned').appendChild(chip);
   if(navigator.vibrate) navigator.vibrate(80);
+  updateCounts();
+}
+function removeCode(code){
+  const list = ta.value.split(/\n/).map(s=>s.trim()).filter(Boolean).filter(c=>c!==code);
+  ta.value = list.join('\n');
+  [...document.getElementById('scanned').children].forEach(ch=>{ if(ch.textContent==='✔ '+code) ch.remove(); });
   updateCounts();
 }
 function updateCounts(){
