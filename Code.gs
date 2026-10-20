@@ -19,6 +19,19 @@ function doPost(e) {
 
     const tracks = String(d.tracking || '').split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
 
+    // กันเลขพัสดุซ้ำ: ซ้ำในฟอร์มเดียวกัน หรือเคยบันทึกในชีตแล้ว
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheets()[0];
+    const dupInForm = tracks.filter((t, i) => tracks.indexOf(t) !== i);
+    if (dupInForm.length) throw new Error('เลขพัสดุซ้ำในฟอร์ม: ' + [...new Set(dupInForm)].join(', '));
+    if (sheet.getLastRow() > 1) {
+      const existing = sheet.getRange(2, 6, sheet.getLastRow() - 1, 1).getValues().map(r => String(r[0]).trim());
+      const dup = tracks.filter(t => existing.includes(t));
+      if (dup.length) {
+        const where = dup.map(t => { const r = existing.indexOf(t) + 2; return `${t} (แถว ${r}, ${sheet.getRange(r,1).getDisplayValue()} ${sheet.getRange(r,2).getDisplayValue()})`; });
+        throw new Error('เลขพัสดุนี้เคยบันทึกแล้ว: ' + where.join(' / '));
+      }
+    }
+
     // บันทึกรูป แยกกลุ่ม สินค้า / ใบรับฝาก
     const itemLinks = [], receiptLinks = [];
     (d.photos || []).forEach(p => {
@@ -33,7 +46,6 @@ function doPost(e) {
     });
 
     const mapLink = (d.lat && d.lng) ? `https://maps.google.com/?q=${d.lat},${d.lng}` : '';
-    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheets()[0];
     if (sheet.getLastRow() === 0) {
       sheet.appendRow(['วันที่','เวลา','ผู้ส่ง','ขนส่ง','สาขา','เลขพัสดุ','จำนวนชิ้นรวม','GPS','รูปสินค้า','รูปใบรับฝาก/เคาน์เตอร์','ยิงรับแล้ว','พนักงานรับฝาก','ตรวจสอบแล้ว','หมายเหตุ','LINE userId']);
     }

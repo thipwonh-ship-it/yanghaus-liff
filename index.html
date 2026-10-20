@@ -135,7 +135,8 @@ const ta = document.getElementById('tracking');
 function addCode(code){
   code = code.trim();
   const list = ta.value.split(/\n/).map(s=>s.trim()).filter(Boolean);
-  if(list.includes(code)) return;
+  if(list.includes(code)){ document.getElementById('msg').textContent='⚠️ เลข '+code+' สแกนไปแล้ว'; if(navigator.vibrate) navigator.vibrate([60,60,60]); return; }
+  document.getElementById('msg').textContent='';
   list.push(code); ta.value = list.join('\n');
   const chip=document.createElement('span'); chip.className='chip'; chip.textContent='✔ '+code;
   document.getElementById('scanned').appendChild(chip);
