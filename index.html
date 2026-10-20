@@ -122,6 +122,7 @@ function preview(inputId, boxId, arr, cntId){
     const picked=[...e.target.files]; e.target.value='';
     for(const f of picked){
       if(inputId==='photo1'){ const ok = await checkLabelPhoto(f); if(!ok) continue; }
+      f.b64 = shrink(f); // ย่อรูปล่วงหน้าทันที
       arr.push(f);
     }
     render();
@@ -201,10 +202,10 @@ document.getElementById('scanBtn').onclick = async ()=>{
 function shrink(file){
   return new Promise(res=>{
     const img=new Image(); img.onload=()=>{
-      const s=Math.min(1,1280/img.width); const c=document.createElement('canvas');
+      const s=Math.min(1,1024/img.width); const c=document.createElement('canvas');
       c.width=img.width*s; c.height=img.height*s;
       c.getContext('2d').drawImage(img,0,0,c.width,c.height);
-      res(c.toDataURL('image/jpeg',0.8).split(',')[1]);
+      res(c.toDataURL('image/jpeg',0.7).split(',')[1]);
     }; img.src=URL.createObjectURL(file);
   });
 }
@@ -230,8 +231,8 @@ document.getElementById('send').onclick = async ()=>{
   if(scanning){ try{ await scanner.stop(); }catch(_){} document.getElementById('scanner').classList.remove('on'); scanning=false; }
   btn.disabled=true; msg.textContent='⏳ กำลังส่ง…';
   const photos=[];
-  for(const f of f1) photos.push({type:'image/jpeg', group:'item', data: await shrink(f)});
-  for(const f of (scanned?f2:files3)) photos.push({type:'image/jpeg', group:'receipt', data: await shrink(f)});
+  for(const f of f1) photos.push({type:'image/jpeg', group:'item', data: await (f.b64||shrink(f))});
+  for(const f of (scanned?f2:files3)) photos.push({type:'image/jpeg', group:'receipt', data: await (f.b64||shrink(f))});
   const body={name:profile.displayName, userId:profile.userId,
     carrier, branch:document.getElementById('branch').value,
     tracking, scanned, staff, note:document.getElementById('note').value, lat:pos?.lat, lng:pos?.lng, photos};

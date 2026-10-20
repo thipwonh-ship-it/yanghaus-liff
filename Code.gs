@@ -15,7 +15,9 @@ function doPost(e) {
     // โฟลเดอร์รายวัน
     const root = DriveApp.getFolderById(FOLDER_ID);
     const it = root.getFoldersByName(dateStr);
-    const day = it.hasNext() ? it.next() : root.createFolder(dateStr);
+    let day;
+    if (it.hasNext()) day = it.next();
+    else { day = root.createFolder(dateStr); day.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } // ตั้งสิทธิ์ครั้งเดียวต่อวัน ไฟล์ข้างในสืบทอด
 
     const tracks = String(d.tracking || '').split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
 
@@ -40,8 +42,7 @@ function doPost(e) {
       const label = isItem ? (tracks[idx] || `item${idx+1}`) : `receipt${idx+1}`;
       const blob = Utilities.newBlob(Utilities.base64Decode(p.data), 'image/jpeg',
         `${dateStr}_${stamp}_${d.carrier}_${label}.jpg`);
-      const f = day.createFile(blob);
-      f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      const f = day.createFile(blob); // สิทธิ์แชร์สืบทอดจากโฟลเดอร์ รูปส่งของ
       (isItem ? itemLinks : receiptLinks).push(f.getUrl());
     });
 
