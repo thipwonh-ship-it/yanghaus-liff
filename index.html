@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>YANG Haus ส่งของ</title>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 <style>
   body{font-family:-apple-system,Sarabun,sans-serif;margin:0;padding:16px;background:#f4f4f4}
   h2{margin:0 0 12px}
@@ -17,6 +18,12 @@
   button:disabled{background:#aaa}
   .small{font-size:13px;color:#666}
   #msg{margin-top:12px;font-weight:600}
+  .scanbtn{background:#1a73e8;margin-top:8px}
+  #scanner{display:none;margin-top:8px;border-radius:8px;overflow:hidden;background:#000}
+  #scanner.on{display:block}
+  .radio label{font-weight:400;margin:6px 0;display:flex;align-items:center;gap:8px;background:#fff;padding:10px;border:1px solid #ccc;border-radius:8px}
+  .radio input{width:auto}
+  .chip{display:inline-block;background:#e8f5e9;color:#1b5e20;padding:4px 10px;border-radius:14px;margin:4px 4px 0 0;font-size:14px}
 </style>
 </head>
 <body>
@@ -25,22 +32,46 @@
 
 <label>ขนส่ง</label>
 <select id="carrier">
-  <option>SPX</option><option>J&T</option><option>Flash</option><option>BEST</option>
+  <option>SPX</option><option>J&T</option><option>Flash</option><option>BEST</option><option value="อื่นๆ">อื่นๆ (ระบุ)</option>
 </select>
+<input id="carrierOther" placeholder="ชื่อขนส่ง" style="display:none;margin-top:8px">
 
 <label>สาขา</label>
 <input id="branch" placeholder="เช่น SPX บางนา">
 
-<label>เลขพัสดุ (1 บรรทัดต่อ 1 ชิ้น)</label>
-<textarea id="tracking" placeholder="TH1234…&#10;TH5678…"></textarea>
+<label>เลขพัสดุ <span style="color:#d32f2f">*บังคับ</span></label>
+<button type="button" class="scanbtn" id="scanBtn">📷 สแกนบาร์โค้ดใบปะหน้า</button>
+<div id="scanner"></div>
+<div id="scanned"></div>
+<textarea id="tracking" placeholder="สแกน หรือพิมพ์ 1 บรรทัดต่อ 1 ชิ้น"></textarea>
 
-<label>รูปของวางที่สาขา เห็นใบปะหน้า (ถ่ายสด)</label>
-<input type="file" id="photo1" accept="image/*" capture="environment" multiple>
+<label>รูปสินค้าวางที่สาขา เห็นใบปะหน้า — 1 ชิ้น 1 รูป <span style="color:#d32f2f">*บังคับ</span></label>
+<input type="file" id="photo1" accept="image/*" capture="environment" style="display:none">
+<button type="button" class="scanbtn" onclick="document.getElementById('photo1').click()">📸 ถ่ายรูปสินค้า (เพิ่มทีละรูป)</button>
 <div class="photos" id="prev1"></div>
+<div class="small" id="cnt1"></div>
 
-<label>รูปใบรับฝาก / หน้าจอสแกน (ถ่ายสด)</label>
-<input type="file" id="photo2" accept="image/*" capture="environment" multiple>
+<label>ขนส่งยิงรับแล้วหรือยัง? <span style="color:#d32f2f">*บังคับ</span></label>
+<div class="radio">
+  <label><input type="radio" name="scanned" value="yes"> ✅ ยิงรับแล้ว</label>
+  <label><input type="radio" name="scanned" value="no"> ⏳ ยังไม่ยิง (ฝากไว้ที่สาขา)</label>
+</div>
+
+<div id="blockYes" style="display:none">
+<label>รูปใบรับฝาก / หน้าจอสแกนของขนส่ง <span style="color:#d32f2f">*บังคับ</span></label>
+<input type="file" id="photo2" accept="image/*" capture="environment" style="display:none">
+<button type="button" class="scanbtn" onclick="document.getElementById('photo2').click()">📸 ถ่ายรูปใบรับฝาก (เพิ่มทีละรูป)</button>
 <div class="photos" id="prev2"></div>
+</div>
+
+<div id="blockNo" style="display:none">
+<label>รูปของวางที่เคาน์เตอร์ เห็นพนักงาน/ป้ายสาขา <span style="color:#d32f2f">*บังคับ</span></label>
+<input type="file" id="photo3" accept="image/*" capture="environment" style="display:none">
+<button type="button" class="scanbtn" onclick="document.getElementById('photo3').click()">📸 ถ่ายรูปเคาน์เตอร์ (เพิ่มทีละรูป)</button>
+<div class="photos" id="prev3"></div>
+<label>พนักงานที่รับฝาก (ชื่อ/ลักษณะ) <span style="color:#d32f2f">*บังคับ</span></label>
+<input id="staff" placeholder="เช่น พี่ผู้ชายเสื้อส้ม ชื่อเอ">
+</div>
 
 <label>หมายเหตุ</label>
 <input id="note" placeholder="(ถ้ามี)">
@@ -72,13 +103,56 @@ async function main(){
   }, {enableHighAccuracy:true, timeout:10000});
 }
 
-function preview(inputId, boxId){
+// สะสมรูปทีละใบ (กดถ่ายเพิ่มได้เรื่อยๆ แตะรูปเพื่อลบ)
+const files1=[], files2=[], files3=[];
+function preview(inputId, boxId, arr, cntId){
+  const box=document.getElementById(boxId);
+  function render(){
+    box.innerHTML='';
+    arr.forEach((f,i)=>{ const img=document.createElement('img'); img.src=URL.createObjectURL(f);
+      img.onclick=()=>{ if(confirm('ลบรูปนี้?')){ arr.splice(i,1); render(); } }; box.appendChild(img); });
+    if(cntId) document.getElementById(cntId).textContent = arr.length ? `${arr.length} รูป` : '';
+  }
   document.getElementById(inputId).addEventListener('change', e=>{
-    const box = document.getElementById(boxId); box.innerHTML='';
-    [...e.target.files].forEach(f=>{ const img=document.createElement('img'); img.src=URL.createObjectURL(f); box.appendChild(img); });
+    [...e.target.files].forEach(f=>arr.push(f)); e.target.value=''; render();
   });
 }
-preview('photo1','prev1'); preview('photo2','prev2');
+preview('photo1','prev1',files1,'cnt1'); preview('photo2','prev2',files2); preview('photo3','prev3',files3);
+document.querySelectorAll('input[name=scanned]').forEach(r=>r.addEventListener('change',e=>{
+  document.getElementById('blockYes').style.display = e.target.value==='yes'?'block':'none';
+  document.getElementById('blockNo').style.display  = e.target.value==='no' ?'block':'none';
+}));
+document.getElementById('carrier').addEventListener('change', e=>{
+  document.getElementById('carrierOther').style.display = e.target.value==='อื่นๆ' ? 'block' : 'none';
+});
+
+// ===== สแกนบาร์โค้ด =====
+let scanner = null, scanning = false, lastCode = '', lastTime = 0;
+const ta = document.getElementById('tracking');
+function addCode(code){
+  code = code.trim();
+  const list = ta.value.split(/\n/).map(s=>s.trim()).filter(Boolean);
+  if(list.includes(code)) return;
+  list.push(code); ta.value = list.join('\n');
+  const chip=document.createElement('span'); chip.className='chip'; chip.textContent='✔ '+code;
+  document.getElementById('scanned').appendChild(chip);
+  if(navigator.vibrate) navigator.vibrate(80);
+}
+document.getElementById('scanBtn').onclick = async ()=>{
+  const btn=document.getElementById('scanBtn'), box=document.getElementById('scanner');
+  if(scanning){ await scanner.stop(); box.classList.remove('on'); btn.textContent='📷 สแกนบาร์โค้ดใบปะหน้า'; scanning=false; return; }
+  scanner = scanner || new Html5Qrcode('scanner');
+  box.classList.add('on'); btn.textContent='⏹ หยุดสแกน'; scanning=true;
+  try{
+    await scanner.start({facingMode:'environment'},
+      {fps:10, qrbox:{width:280,height:120}, formatsToSupport:[Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39, Html5QrcodeSupportedFormats.QR_CODE]},
+      (text)=>{
+        const now=Date.now();
+        if(text===lastCode && now-lastTime<2000) return;
+        lastCode=text; lastTime=now; addCode(text);
+      }, ()=>{});
+  }catch(e){ document.getElementById('msg').textContent='❌ เปิดกล้องไม่ได้: '+e; box.classList.remove('on'); btn.textContent='📷 สแกนบาร์โค้ดใบปะหน้า'; scanning=false; }
+};
 
 // ย่อรูปก่อนส่ง (กว้างสุด 1280px)
 function shrink(file){
@@ -94,22 +168,36 @@ function shrink(file){
 
 document.getElementById('send').onclick = async ()=>{
   const btn=document.getElementById('send'), msg=document.getElementById('msg');
-  const f1=[...document.getElementById('photo1').files], f2=[...document.getElementById('photo2').files];
+  const f1=files1, f2=files2;
   const tracking=document.getElementById('tracking').value.trim();
-  if(!tracking){ msg.textContent='⚠️ ใส่เลขพัสดุก่อน'; return; }
-  if(!f1.length){ msg.textContent='⚠️ ถ่ายรูปของวางที่สาขาก่อน'; return; }
+  const nTrack=tracking.split(/\n/).map(s=>s.trim()).filter(Boolean).length;
+  let carrier=document.getElementById('carrier').value;
+  if(carrier==='อื่นๆ'){ carrier=document.getElementById('carrierOther').value.trim(); if(!carrier){ msg.textContent='⚠️ ระบุชื่อขนส่ง'; return; } }
+  if(!tracking){ msg.textContent='⚠️ ต้องใส่เลขพัสดุ (สแกนหรือพิมพ์)'; return; }
+  if(!f1.length){ msg.textContent='⚠️ ต้องถ่ายรูปของวางที่สาขา (เห็นใบปะหน้า)'; return; }
+  if(f1.length!==nTrack && !confirm(`เลขพัสดุ ${nTrack} ชิ้น แต่รูปสินค้า ${f1.length} รูป\nควรถ่าย 1 ชิ้น 1 รูป — ส่งต่อเลยไหม?`)) return;
+  const scannedEl=document.querySelector('input[name=scanned]:checked');
+  if(!scannedEl){ msg.textContent='⚠️ เลือกว่าขนส่งยิงรับแล้วหรือยัง'; return; }
+  const scanned=scannedEl.value==='yes';
+  const staff=document.getElementById('staff').value.trim();
+  if(scanned && !f2.length){ msg.textContent='⚠️ ต้องถ่ายรูปใบรับฝาก/หน้าจอสแกนของขนส่ง'; return; }
+  if(!scanned && !files3.length){ msg.textContent='⚠️ ต้องถ่ายรูปของวางที่เคาน์เตอร์'; return; }
+  if(!scanned && !staff){ msg.textContent='⚠️ ระบุพนักงานที่รับฝาก'; return; }
+  if(scanning){ try{ await scanner.stop(); }catch(_){} document.getElementById('scanner').classList.remove('on'); scanning=false; }
   btn.disabled=true; msg.textContent='⏳ กำลังส่ง…';
-  const photos=[]; for(const f of [...f1,...f2]) photos.push({type:'image/jpeg', data: await shrink(f)});
+  const photos=[];
+  for(const f of f1) photos.push({type:'image/jpeg', group:'item', data: await shrink(f)});
+  for(const f of (scanned?f2:files3)) photos.push({type:'image/jpeg', group:'receipt', data: await shrink(f)});
   const body={name:profile.displayName, userId:profile.userId,
-    carrier:document.getElementById('carrier').value, branch:document.getElementById('branch').value,
-    tracking, note:document.getElementById('note').value, lat:pos?.lat, lng:pos?.lng, photos};
+    carrier, branch:document.getElementById('branch').value,
+    tracking, scanned, staff, note:document.getElementById('note').value, lat:pos?.lat, lng:pos?.lng, photos};
   try{
     const r=await fetch(GAS_URL,{method:'POST',body:JSON.stringify(body)});
     const j=await r.json();
     if(!j.ok) throw new Error(j.error);
     msg.textContent=`✅ บันทึกแล้ว ${j.time} (${j.count} ชิ้น)`;
     if(liff.isInClient()){
-      await liff.sendMessages([{type:'text',text:`📦 ส่งของแล้ว ${j.time}\n${body.carrier} ${body.branch}\n${j.count} ชิ้น\n${tracking}\n${pos?`📍 https://maps.google.com/?q=${pos.lat},${pos.lng}`:''}`}]).catch(()=>{});
+      await liff.sendMessages([{type:'text',text:`${scanned?'📦 ส่งของแล้ว ✅ ยิงรับแล้ว':'📦 ส่งของแล้ว ⏳ ยังไม่ยิงรับ รอตรวจสอบ'} ${j.time}\n${body.carrier} ${body.branch}${scanned?'':'\nรับฝาก: '+staff}\n${j.count} ชิ้น\n${tracking}\n${pos?`📍 https://maps.google.com/?q=${pos.lat},${pos.lng}`:''}`}]).catch(()=>{});
       setTimeout(()=>liff.closeWindow(),1500);
     }
   }catch(e){ msg.textContent='❌ ส่งไม่สำเร็จ: '+e.message; btn.disabled=false; }
