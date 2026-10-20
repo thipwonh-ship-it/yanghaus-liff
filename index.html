@@ -29,6 +29,9 @@
 <body>
 <h2>📦 ส่งของที่สาขา</h2>
 <div class="small" id="who">กำลังเชื่อม LINE…</div>
+<div class="small" style="background:#fff;border-radius:8px;padding:10px;margin-top:10px;line-height:1.6">
+<b>ขั้นตอน:</b> ① สแกนบาร์โค้ด → ② ถ่ายรูปชิ้นนั้น → ทำซ้ำจนครบทุกชิ้น → ③ ตอบว่าขนส่งยิงรับหรือยัง → ④ ถ่ายรูปสุดท้าย 1 รูป → ⑤ บันทึก
+</div>
 
 <label>ขนส่ง</label>
 <select id="carrier">
@@ -45,9 +48,9 @@
 <div id="scanned"></div>
 <textarea id="tracking" placeholder="สแกน หรือพิมพ์ 1 บรรทัดต่อ 1 ชิ้น"></textarea>
 
-<label>รูปสินค้าวางที่สาขา เห็นใบปะหน้า — 1 ชิ้น 1 รูป <span style="color:#d32f2f">*บังคับ</span></label>
+<label>รูปสินค้า: ถ่ายทีละชิ้น ให้เห็นใบปะหน้า (ชิ้นไหนสแกนแล้ว ถ่ายชิ้นนั้น) <span style="color:#d32f2f">*บังคับ</span></label>
 <input type="file" id="photo1" accept="image/*" capture="environment" style="display:none">
-<button type="button" class="scanbtn" onclick="document.getElementById('photo1').click()">📸 ถ่ายรูปสินค้า (เพิ่มทีละรูป)</button>
+<button type="button" class="scanbtn" onclick="document.getElementById('photo1').click()">📸 ถ่ายรูปสินค้าชิ้นนี้ (กดซ้ำได้ถ้ามีหลายชิ้น)</button>
 <div class="photos" id="prev1"></div>
 <div class="small" id="cnt1"></div>
 
@@ -60,14 +63,14 @@
 <div id="blockYes" style="display:none">
 <label>รูปใบรับฝาก / หน้าจอสแกนของขนส่ง <span style="color:#d32f2f">*บังคับ</span></label>
 <input type="file" id="photo2" accept="image/*" capture="environment" style="display:none">
-<button type="button" class="scanbtn" onclick="document.getElementById('photo2').click()">📸 ถ่ายรูปใบรับฝาก (เพิ่มทีละรูป)</button>
+<button type="button" class="scanbtn" onclick="document.getElementById('photo2').click()">📸 ถ่ายรูปใบรับฝาก / หน้าจอสแกน (1 รูปพอ)</button>
 <div class="photos" id="prev2"></div>
 </div>
 
 <div id="blockNo" style="display:none">
 <label>รูปของวางที่เคาน์เตอร์ เห็นพนักงาน/ป้ายสาขา <span style="color:#d32f2f">*บังคับ</span></label>
 <input type="file" id="photo3" accept="image/*" capture="environment" style="display:none">
-<button type="button" class="scanbtn" onclick="document.getElementById('photo3').click()">📸 ถ่ายรูปเคาน์เตอร์ (เพิ่มทีละรูป)</button>
+<button type="button" class="scanbtn" onclick="document.getElementById('photo3').click()">📸 ถ่ายรูปของทั้งหมดที่เคาน์เตอร์ (1 รูปพอ)</button>
 <div class="photos" id="prev3"></div>
 <label>พนักงานที่รับฝาก (ชื่อ/ลักษณะ) <span style="color:#d32f2f">*บังคับ</span></label>
 <input id="staff" placeholder="เช่น พี่ผู้ชายเสื้อส้ม ชื่อเอ">
