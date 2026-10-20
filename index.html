@@ -30,7 +30,7 @@
 <h2>📦 ส่งของที่สาขา</h2>
 <div class="small" id="who">กำลังเชื่อม LINE…</div>
 <div class="small" style="background:#fff;border-radius:8px;padding:10px;margin-top:10px;line-height:1.6">
-<b>ขั้นตอน:</b> ① สแกนบาร์โค้ด → ② ถ่ายรูปชิ้นนั้น → ทำซ้ำจนครบทุกชิ้น → ③ ตอบว่าขนส่งยิงรับหรือยัง → ④ ถ่ายรูปสุดท้าย 1 รูป → ⑤ บันทึก
+<b>ขั้นตอน:</b> ① ถ่ายรูปสินค้าทีละชิ้น ให้เห็นใบปะหน้า (ระบบอ่านเลขให้เอง) → ② ตอบว่าขนส่งยิงรับหรือยัง → ③ ถ่ายรูปสุดท้าย 1 รูป → ④ บันทึก
 </div>
 
 <label>ขนส่ง</label>
@@ -42,18 +42,18 @@
 <label>สาขา</label>
 <input id="branch" placeholder="เช่น SPX บางนา">
 
-<label>เลขพัสดุ <span style="color:#d32f2f">*บังคับ</span></label>
-<button type="button" class="scanbtn" id="scanBtn">📷 สแกนบาร์โค้ดใบปะหน้า</button>
-<div id="scanner"></div>
-<div id="scanned"></div>
-<textarea id="tracking" placeholder="สแกน หรือพิมพ์ 1 บรรทัดต่อ 1 ชิ้น"></textarea>
-
 <label>ถ่ายรูปสินค้าแต่ละชิ้นให้เห็นใบปะหน้าชัดเจน <span style="color:#d32f2f">*บังคับ</span></label>
 <input type="file" id="photo1" accept="image/*" capture="environment" style="display:none">
-<button type="button" class="scanbtn" onclick="document.getElementById('photo1').click()">📸 ถ่ายรูปสินค้าชิ้นนี้ (กดซ้ำได้ถ้ามีหลายชิ้น)</button>
+<button type="button" class="scanbtn" onclick="document.getElementById('photo1').click()">📸 ถ่ายรูปสินค้า (กดซ้ำทุกชิ้น)</button>
 <div class="photos" id="prev1"></div>
 <div id="filescan" style="display:none"></div>
 <div class="small" id="cnt1"></div>
+
+<label>เลขพัสดุที่อ่านได้ <span class="small" id="trackCount"></span></label>
+<div id="scanned"></div>
+<textarea id="tracking" placeholder="ระบบจะใส่ให้จากรูป (พิมพ์เพิ่มได้ถ้าอ่านไม่ติด)"></textarea>
+<button type="button" class="scanbtn" id="scanBtn" style="background:#607d8b;font-size:14px;padding:8px">📷 อ่านไม่ติด? สแกนบาร์โค้ดด้วยกล้อง</button>
+<div id="scanner"></div>
 
 <label>ขนส่งยิงรับแล้วหรือยัง? <span style="color:#d32f2f">*บังคับ</span></label>
 <div class="radio">
@@ -69,10 +69,11 @@
 </div>
 
 <div id="blockNo" style="display:none">
-<label>ถ่ายรูปของทั้งหมดให้เห็นครบจำนวนชิ้น <span style="color:#d32f2f">*บังคับ</span></label>
+<label>ถ่ายรูปของทั้งหมดให้เห็นครบ <span id="needCount">…</span> ชิ้น <span style="color:#d32f2f">*บังคับ</span></label>
 <input type="file" id="photo3" accept="image/*" capture="environment" style="display:none">
 <button type="button" class="scanbtn" onclick="document.getElementById('photo3').click()">📸 ถ่ายรูปของทั้งหมด (1 รูปพอ)</button>
 <div class="photos" id="prev3"></div>
+<div class="radio"><label><input type="checkbox" id="confirmCount"> ✔ ยืนยันว่าในรูปเห็นครบ <span id="needCount2">…</span> ชิ้น</label></div>
 <label>พนักงานที่รับฝาก (ชื่อ/ลักษณะ) <span style="color:#d32f2f">*บังคับ</span></label>
 <input id="staff" placeholder="เช่น พี่ผู้ชายเสื้อส้ม ชื่อเอ">
 </div>
@@ -171,10 +172,18 @@ function addCode(code){
   const chip=document.createElement('span'); chip.className='chip'; chip.textContent='✔ '+code;
   document.getElementById('scanned').appendChild(chip);
   if(navigator.vibrate) navigator.vibrate(80);
+  updateCounts();
 }
+function updateCounts(){
+  const n = ta.value.split(/\n/).map(s=>s.trim()).filter(Boolean).length;
+  document.getElementById('trackCount').textContent = n ? `(${n} ชิ้น)` : '';
+  document.getElementById('needCount').textContent = n || '…';
+  document.getElementById('needCount2').textContent = n || '…';
+}
+ta.addEventListener('input', updateCounts);
 document.getElementById('scanBtn').onclick = async ()=>{
   const btn=document.getElementById('scanBtn'), box=document.getElementById('scanner');
-  if(scanning){ await scanner.stop(); box.classList.remove('on'); btn.textContent='📷 สแกนบาร์โค้ดใบปะหน้า'; scanning=false; return; }
+  if(scanning){ await scanner.stop(); box.classList.remove('on'); btn.textContent='📷 อ่านไม่ติด? สแกนบาร์โค้ดด้วยกล้อง'; scanning=false; return; }
   scanner = scanner || new Html5Qrcode('scanner');
   box.classList.add('on'); btn.textContent='⏹ หยุดสแกน'; scanning=true;
   try{
@@ -185,7 +194,7 @@ document.getElementById('scanBtn').onclick = async ()=>{
         if(text===lastCode && now-lastTime<2000) return;
         lastCode=text; lastTime=now; addCode(text);
       }, ()=>{});
-  }catch(e){ document.getElementById('msg').textContent='❌ เปิดกล้องไม่ได้: '+e; box.classList.remove('on'); btn.textContent='📷 สแกนบาร์โค้ดใบปะหน้า'; scanning=false; }
+  }catch(e){ document.getElementById('msg').textContent='❌ เปิดกล้องไม่ได้: '+e; box.classList.remove('on'); btn.textContent='📷 อ่านไม่ติด? สแกนบาร์โค้ดด้วยกล้อง'; scanning=false; }
 };
 
 // ย่อรูปก่อนส่ง (กว้างสุด 1280px)
@@ -217,6 +226,7 @@ document.getElementById('send').onclick = async ()=>{
   if(scanned && !f2.length){ msg.textContent='⚠️ ต้องถ่ายรูปใบรับฝาก/หน้าจอสแกนของขนส่ง'; return; }
   if(!scanned && !files3.length){ msg.textContent='⚠️ ต้องถ่ายรูปของวางที่เคาน์เตอร์'; return; }
   if(!scanned && !staff){ msg.textContent='⚠️ ระบุพนักงานที่รับฝาก'; return; }
+  if(!scanned && !document.getElementById('confirmCount').checked){ msg.textContent=`⚠️ ติ๊กยืนยันว่ารูปเห็นครบ ${nTrack} ชิ้น`; return; }
   if(scanning){ try{ await scanner.stop(); }catch(_){} document.getElementById('scanner').classList.remove('on'); scanning=false; }
   btn.disabled=true; msg.textContent='⏳ กำลังส่ง…';
   const photos=[];
