@@ -52,6 +52,7 @@
 <input type="file" id="photo1" accept="image/*" capture="environment" style="display:none">
 <button type="button" class="scanbtn" onclick="document.getElementById('photo1').click()">📸 ถ่ายรูปสินค้าชิ้นนี้ (กดซ้ำได้ถ้ามีหลายชิ้น)</button>
 <div class="photos" id="prev1"></div>
+<div id="filescan" style="display:none"></div>
 <div class="small" id="cnt1"></div>
 
 <label>ขนส่งยิงรับแล้วหรือยัง? <span style="color:#d32f2f">*บังคับ</span></label>
@@ -116,9 +117,38 @@ function preview(inputId, boxId, arr, cntId){
       img.onclick=()=>{ if(confirm('ลบรูปนี้?')){ arr.splice(i,1); render(); } }; box.appendChild(img); });
     if(cntId) document.getElementById(cntId).textContent = arr.length ? `${arr.length} รูป` : '';
   }
-  document.getElementById(inputId).addEventListener('change', e=>{
-    [...e.target.files].forEach(f=>arr.push(f)); e.target.value=''; render();
+  document.getElementById(inputId).addEventListener('change', async e=>{
+    const picked=[...e.target.files]; e.target.value='';
+    for(const f of picked){
+      if(inputId==='photo1'){ const ok = await checkLabelPhoto(f); if(!ok) continue; }
+      arr.push(f);
+    }
+    render();
   });
+}
+
+// ตรวจรูปสินค้า: ต้องอ่านบาร์โค้ดใบปะหน้าจากรูปได้
+let fileScanner=null;
+async function checkLabelPhoto(file){
+  const msg=document.getElementById('msg');
+  msg.textContent='🔍 กำลังตรวจใบปะหน้าในรูป…';
+  fileScanner = fileScanner || new Html5Qrcode('filescan');
+  let code=null;
+  try{ const r=await fileScanner.scanFileV2(file,false); code=(r.decodedText||'').trim(); }catch(_){}
+  if(!code){
+    msg.textContent='❌ ไม่เห็นบาร์โค้ดใบปะหน้าในรูป กรุณาถ่ายใหม่ให้ชัด (ถ้าแน่ใจว่าเห็นชัด กดยืนยันได้)';
+    if(navigator.vibrate) navigator.vibrate([60,60,60]);
+    return confirm('อ่านบาร์โค้ดจากรูปไม่ได้\nถ่ายใหม่ให้เห็นใบปะหน้าชัดเจน\n\nยืนยันใช้รูปนี้อยู่ดี?');
+  }
+  const list = ta.value.split(/\n/).map(s=>s.trim()).filter(Boolean);
+  if(!list.includes(code)){
+    // ยังไม่ได้สแกนเลขนี้ → เพิ่มให้เลยจากรูป
+    addCode(code);
+    msg.textContent='✅ อ่านใบปะหน้าได้ '+code+' (เพิ่มเลขให้แล้ว)';
+  } else {
+    msg.textContent='✅ ใบปะหน้าชัด ตรงกับ '+code;
+  }
+  return true;
 }
 preview('photo1','prev1',files1,'cnt1'); preview('photo2','prev2',files2); preview('photo3','prev3',files3);
 document.querySelectorAll('input[name=scanned]').forEach(r=>r.addEventListener('change',e=>{
