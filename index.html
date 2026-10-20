@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YANG Haus ส่งของ</title>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  body{font-family:-apple-system,Sarabun,sans-serif;margin:0;padding:16px;background:#f4f4f4}
+  h2{margin:0 0 12px}
+  label{display:block;font-weight:600;margin:14px 0 6px}
+  input,select,textarea,button{width:100%;box-sizing:border-box;font-size:16px;padding:12px;border:1px solid #ccc;border-radius:8px;background:#fff}
+  textarea{min-height:80px}
+  .photos{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .photos img{width:90px;height:90px;object-fit:cover;border-radius:6px}
+  button{background:#06c755;color:#fff;border:0;font-weight:700;margin-top:20px}
+  button:disabled{background:#aaa}
+  .small{font-size:13px;color:#666}
+  #msg{margin-top:12px;font-weight:600}
+</style>
+</head>
+<body>
+<h2>📦 ส่งของที่สาขา</h2>
+<div class="small" id="who">กำลังเชื่อม LINE…</div>
+
+<label>ขนส่ง</label>
+<select id="carrier">
+  <option>SPX</option><option>J&T</option><option>Flash</option><option>BEST</option>
+</select>
+
+<label>สาขา</label>
+<input id="branch" placeholder="เช่น SPX บางนา">
+
+<label>เลขพัสดุ (1 บรรทัดต่อ 1 ชิ้น)</label>
+<textarea id="tracking" placeholder="TH1234…&#10;TH5678…"></textarea>
+
+<label>รูปของวางที่สาขา เห็นใบปะหน้า (ถ่ายสด)</label>
+<input type="file" id="photo1" accept="image/*" capture="environment" multiple>
+<div class="photos" id="prev1"></div>
+
+<label>รูปใบรับฝาก / หน้าจอสแกน (ถ่ายสด)</label>
+<input type="file" id="photo2" accept="image/*" capture="environment" multiple>
+<div class="photos" id="prev2"></div>
+
+<label>หมายเหตุ</label>
+<input id="note" placeholder="(ถ้ามี)">
+
+<div class="small" id="gps">📍 กำลังหาตำแหน่ง…</div>
+<button id="send" disabled>บันทึก</button>
+<div id="msg"></div>
+
+<script>
+// ===== ตั้งค่า (แก้ 2 บรรทัดนี้) =====
+const LIFF_ID = '2012109669-jTtL2UEr';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkkLIG7UicPi3G9x189PN7qNsEyc50iS4p01DTmkUDXU9mu6iEcYtZNezPRa8Ycgcz/exec';
+// ===================================
+
+let profile = null, pos = null;
+
+async function main(){
+  await liff.init({liffId: LIFF_ID});
+  if(!liff.isLoggedIn()){ liff.login(); return; }
+  profile = await liff.getProfile();
+  document.getElementById('who').textContent = 'ผู้ส่ง: ' + profile.displayName;
+  navigator.geolocation.getCurrentPosition(p=>{
+    pos = {lat:p.coords.latitude, lng:p.coords.longitude};
+    document.getElementById('gps').textContent = `📍 ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`;
+    document.getElementById('send').disabled = false;
+  }, ()=>{
+    document.getElementById('gps').textContent = '📍 ไม่ได้ตำแหน่ง (กรุณาอนุญาต Location)';
+    document.getElementById('send').disabled = false;
+  }, {enableHighAccuracy:true, timeout:10000});
+}
+
+function preview(inputId, boxId){
+  document.getElementById(inputId).addEventListener('change', e=>{
+    const box = document.getElementById(boxId); box.innerHTML='';
+    [...e.target.files].forEach(f=>{ const img=document.createElement('img'); img.src=URL.createObjectURL(f); box.appendChild(img); });
+  });
+}
+preview('photo1','prev1'); preview('photo2','prev2');
+
+// ย่อรูปก่อนส่ง (กว้างสุด 1280px)
+function shrink(file){
+  return new Promise(res=>{
+    const img=new Image(); img.onload=()=>{
+      const s=Math.min(1,1280/img.width); const c=document.createElement('canvas');
+      c.width=img.width*s; c.height=img.height*s;
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+      res(c.toDataURL('image/jpeg',0.8).split(',')[1]);
+    }; img.src=URL.createObjectURL(file);
+  });
+}
+
+document.getElementById('send').onclick = async ()=>{
+  const btn=document.getElementById('send'), msg=document.getElementById('msg');
+  const f1=[...document.getElementById('photo1').files], f2=[...document.getElementById('photo2').files];
+  const tracking=document.getElementById('tracking').value.trim();
+  if(!tracking){ msg.textContent='⚠️ ใส่เลขพัสดุก่อน'; return; }
+  if(!f1.length){ msg.textContent='⚠️ ถ่ายรูปของวางที่สาขาก่อน'; return; }
+  btn.disabled=true; msg.textContent='⏳ กำลังส่ง…';
+  const photos=[]; for(const f of [...f1,...f2]) photos.push({type:'image/jpeg', data: await shrink(f)});
+  const body={name:profile.displayName, userId:profile.userId,
+    carrier:document.getElementById('carrier').value, branch:document.getElementById('branch').value,
+    tracking, note:document.getElementById('note').value, lat:pos?.lat, lng:pos?.lng, photos};
+  try{
+    const r=await fetch(GAS_URL,{method:'POST',body:JSON.stringify(body)});
+    const j=await r.json();
+    if(!j.ok) throw new Error(j.error);
+    msg.textContent=`✅ บันทึกแล้ว ${j.time} (${j.count} ชิ้น)`;
+    if(liff.isInClient()){
+      await liff.sendMessages([{type:'text',text:`📦 ส่งของแล้ว ${j.time}\n${body.carrier} ${body.branch}\n${j.count} ชิ้น\n${tracking}\n${pos?`📍 https://maps.google.com/?q=${pos.lat},${pos.lng}`:''}`}]).catch(()=>{});
+      setTimeout(()=>liff.closeWindow(),1500);
+    }
+  }catch(e){ msg.textContent='❌ ส่งไม่สำเร็จ: '+e.message; btn.disabled=false; }
+};
+main();
+</script>
+</body>
+</html>
