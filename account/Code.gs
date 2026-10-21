@@ -5,7 +5,9 @@
  * Deploy: Apps Script → Deploy → New deployment → Web app
  *   Execute as: Me / Who has access: Anyone
  * Script Properties (Project Settings → Script properties):
- *   GEMINI_API_KEY = คีย์จาก https://aistudio.google.com/apikey  (ไม่ใส่ = กรอกเองทุกช่อง)
+ *   GEMINI_API_KEY   = คีย์จาก https://aistudio.google.com/apikey  (ไม่ใส่ = กรอกเองทุกช่อง)
+ *   LINE_CHANNEL_ID  = Channel ID ของ LINE Login channel "YH ขนส่ง Login" (หน้า Basic settings)
+ *   COD_ADMINS       = LINE userId ที่ติ๊กเงิน COD เข้าได้ คั่นด้วย , (ดู userId ได้ท้ายหน้าฟอร์ม)
  */
 const SHEET_ID  = '17gY8l9pkJjIXqZWRfStYwga-xasJjef97HaHfI7KIB4';
 const FOLDER_ID = '1Pfy5Bo6vfkxWDyglsAJwDhg9rh5pajV-';   // โฟลเดอร์ ส่งบัญชี
@@ -32,8 +34,9 @@ function doPost(e) {
       case 'config': return json_(getConfig_());
       case 'read':   return json_(readReceipt_(req.image, req.mime, req.type));
       case 'save':   return json_(saveRecord_(req));
-      case 'codPending': return json_(codPending_());
-      case 'codPaid':    return json_(codPaid_(req.items, req.by));
+      case 'whoami':     return json_(whoami_(req.idToken));
+      case 'codPending': { const u = requireAdmin_(req.idToken); return json_(u.ok ? codPending_() : u); }
+      case 'codPaid':    { const u = requireAdmin_(req.idToken); return json_(u.ok ? codPaid_(req.items, u.name) : u); }
       default:       return json_({ ok: false, error: 'unknown action' });
     }
   } catch (err) {
@@ -154,6 +157,32 @@ function saveRecord_(r) {
   if (r.taxId) sh.getRange(row, isBuy ? 15 : 13).setNumberFormat('@');
 
   return { ok: true, row: row, tab: sh.getName(), photoUrl: photoUrl, vat: hasVat ? +(total - total / 1.07).toFixed(2) : 0 };
+}
+
+/* ---------- สิทธิ์: ตรวจ ID token กับ LINE แล้วเช็ค userId ใน COD_ADMINS ---------- */
+function verifyLine_(idToken) {
+  const cid = PropertiesService.getScriptProperties().getProperty('LINE_CHANNEL_ID');
+  if (!idToken || !cid) return null;
+  const res = UrlFetchApp.fetch('https://api.line.me/oauth2/v2.1/verify', {
+    method: 'post', payload: { id_token: idToken, client_id: cid }, muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) return null;
+  const j = JSON.parse(res.getContentText());
+  return { userId: j.sub, name: j.name || '' };
+}
+function isAdmin_(userId) {
+  const list = (PropertiesService.getScriptProperties().getProperty('COD_ADMINS') || '').split(/[,\s]+/).filter(Boolean);
+  return list.indexOf(userId) >= 0;
+}
+function whoami_(idToken) {
+  const u = verifyLine_(idToken);
+  if (!u) return { ok: true, userId: '', admin: false, note: !PropertiesService.getScriptProperties().getProperty('LINE_CHANNEL_ID') ? 'ยังไม่ได้ตั้ง LINE_CHANNEL_ID' : 'ตรวจ token ไม่ผ่าน' };
+  return { ok: true, userId: u.userId, name: u.name, admin: isAdmin_(u.userId) };
+}
+function requireAdmin_(idToken) {
+  const u = verifyLine_(idToken);
+  if (!u) return { ok: false, error: 'ยืนยันตัวตนกับ LINE ไม่ผ่าน (ตั้ง LINE_CHANNEL_ID หรือเปิดหน้าใหม่)' };
+  if (!isAdmin_(u.userId)) return { ok: false, error: 'ไม่มีสิทธิ์ติ๊กเงิน COD (userId ' + u.userId + ')' };
+  return { ok: true, userId: u.userId, name: u.name };
 }
 
 /* รายการ COD ที่ยังไม่ได้เงิน (L = FALSE) */

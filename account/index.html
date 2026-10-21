@@ -56,7 +56,7 @@
     </div>
     <div class="hint" id="tHint">ค่าแท็กซี่ Lalamove อุปกรณ์ ค่าโฆษณา บิลโทรศัพท์ ฯลฯ</div>
   </div>
-  <div class="card" style="padding:10px 14px">
+  <div class="card hide" style="padding:10px 14px" id="paidCard">
     <button class="big alt" style="margin:0" onclick="openPaid()">💰 เงิน COD เข้าแล้ว — ติ๊กรายการ</button>
   </div>
   <div class="card">
@@ -163,6 +163,7 @@
   </div>
 </section>
 
+<div class="hint" id="whoBox" style="text-align:center;margin-top:20px;font-size:11px;color:#999"></div>
 </main>
 
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
@@ -170,7 +171,7 @@
 const LIFF_ID = '2012109669-kGPX1UtI';
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxm5fuyVniisAk14alXdzSMDsvrf_iQ_lI6Ti6hDDPOs--PSsZMVabqC_OwOP7Paa0SWA/exec';
 
-let type = 'exp', imgB64 = '', imgMime = 'image/jpeg', profile = null, cfg = null, hasAI = true;
+let type = 'exp', imgB64 = '', imgMime = 'image/jpeg', profile = null, cfg = null, hasAI = true, idToken = '';
 const $ = id => document.getElementById(id);
 
 async function init() {
@@ -179,6 +180,12 @@ async function init() {
     if (!liff.isLoggedIn()) { liff.login(); return; }
     profile = await liff.getProfile();
     $('who').textContent = profile.displayName;
+    idToken = liff.getIDToken() || '';
+    post({ action: 'whoami', idToken }).then(w => {
+      if (!w.ok) return;
+      $('whoBox').textContent = w.userId ? 'LINE userId: ' + w.userId + (w.admin ? ' (ผู้ดูแล)' : '') : (w.note || '');
+      if (w.admin) $('paidCard').classList.remove('hide');
+    });
   } catch (e) { $('who').textContent = 'นอก LINE'; }
   try { cfg = JSON.parse(localStorage.getItem('yh_cfg') || 'null'); } catch (e) {}
   if (cfg) fillConfig();
@@ -347,7 +354,7 @@ async function openPaid() {
   $('s1').classList.add('hide'); $('s4').classList.remove('hide'); window.scrollTo(0, 0);
   $('pDate').value = today(); $('pMsg').innerHTML = '';
   $('pList').innerHTML = '<span class="spin"></span>กำลังโหลด…';
-  const r = await post({ action: 'codPending' });
+  const r = await post({ action: 'codPending', idToken });
   if (!r.ok) { $('pList').innerHTML = '<div class="msg err">โหลดไม่ได้: ' + (r.error || '') + '</div>'; return; }
   pending = r.items || [];
   if (!pending.length) { $('pList').innerHTML = '<div class="msg ok">ไม่มี COD ค้างรับ 🎉</div>'; return; }
@@ -358,7 +365,7 @@ async function savePaid() {
   const items = pending.map((x, i) => $('pc' + i) && $('pc' + i).checked ? { row: x.row, tracking: x.tracking, amount: Number($('pa' + i).value) || 0, date: $('pDate').value } : null).filter(Boolean);
   if (!items.length) return ($('pMsg').innerHTML = '<div class="msg err">ยังไม่ได้ติ๊กรายการ</div>');
   $('btnPaid').disabled = true; $('pMsg').innerHTML = '<div class="msg"><span class="spin"></span>กำลังบันทึก…</div>';
-  const r = await post({ action: 'codPaid', items, by: profile ? profile.displayName : '' });
+  const r = await post({ action: 'codPaid', items, idToken });
   $('btnPaid').disabled = false;
   if (!r.ok) return ($('pMsg').innerHTML = '<div class="msg err">ไม่สำเร็จ: ' + (r.error || '') + '</div>');
   const lines = ['💰 เงิน COD เข้า ' + r.count + ' ชิ้น รวม ' + r.sum.toLocaleString(undefined, { minimumFractionDigits: 2 }) + ' บาท (' + $('pDate').value + ')']
