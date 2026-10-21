@@ -14,7 +14,10 @@ const GEMINI_PREFER = ['gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.5-
 
 const TAB_EXP = 'ค่าใช้จ่าย';
 const TAB_BUY = 'ซื้อ';
+const TAB_COD = 'COD';
+const TAB_SALE = 'ขาย';
 const TAB_CFG = 'ตั้งค่า';
+const CAT_SHIP = 'Lalamove/ค่าส่งสินค้า';
 const SUB_VAT = 'ภาษีซื้อ';
 const SUB_OTHER = 'ใบเสร็จอื่นๆ';
 
@@ -27,7 +30,7 @@ function doPost(e) {
     const req = JSON.parse(e.postData.contents || '{}');
     switch (req.action) {
       case 'config': return json_(getConfig_());
-      case 'read':   return json_(readReceipt_(req.image, req.mime));
+      case 'read':   return json_(readReceipt_(req.image, req.mime, req.type));
       case 'save':   return json_(saveRecord_(req));
       default:       return json_({ ok: false, error: 'unknown action' });
     }
@@ -40,7 +43,7 @@ function doPost(e) {
 function getConfig_() {
   const sh = SpreadsheetApp.openById(SHEET_ID).getSheetByName(TAB_CFG);
   const col = c => sh.getRange(5, c, 40, 1).getValues().map(r => String(r[0]).trim()).filter(Boolean);
-  return { ok: true, business: col(1), suppliers: col(5), categories: col(7), hasAI: !!geminiKey_() };
+  return { ok: true, business: col(1), suppliers: col(5), categories: col(7), carriers: col(11), hasAI: !!geminiKey_() };
 }
 
 /* ---------- read: ให้ Gemini อ่านใบเสร็จ ---------- */
@@ -48,13 +51,26 @@ function geminiKey_() {
   return PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
 }
 
-function readReceipt_(b64, mime) {
+function readReceipt_(b64, mime, type) {
   const key = geminiKey_();
   if (!key) return { ok: true, noai: true };
   if (!b64) return { ok: false, error: 'no image' };
 
-  const cats = getConfig_().categories;
-  const prompt =
+  const cfg = getConfig_();
+  const cats = cfg.categories;
+  const prompt = type === 'cod' ?
+    'You are reading a Thai parcel/COD shipping receipt or waybill (Flash Express, NNP, J&T, Kerry...) for bookkeeping. Return ONLY JSON with keys:\n' +
+    'date (YYYY-MM-DD; Thai year พ.ศ. minus 543; empty if unreadable), ' +
+    'carrier (best match from: ' + cfg.carriers.join(' | ') + '), ' +
+    'tracking (parcel/tracking/waybill number, e.g. TH2301996BHA0G or OT6924638), ' +
+    'customer (consignee/receiver name), ' +
+    'items (goods description, short Thai), ' +
+    'cod_amount (amount to collect from receiver; on NNP waybill it is the number in *** after the item e.g. ***3,090; 0 if not COD), ' +
+    'freight (shipping fee number), cod_fee (COD service fee number, 0 if none), vat (VAT amount shown, 0 if none), ' +
+    'total_paid (total the sender paid now; 0 if paid by deduction later), ' +
+    'receipt_no (receipt/document number if any), seller_tax_id (carrier 13-digit tax id, digits only, empty if none), ' +
+    'confidence (0-1).'
+    :
     'You are reading a Thai receipt / tax invoice photo for bookkeeping. Return ONLY JSON with these keys:\n' +
     'date (YYYY-MM-DD; Thai year พ.ศ. minus 543; empty if unreadable), ' +
     'vendor (seller name, Thai as printed, no address), ' +
@@ -94,6 +110,7 @@ function readReceipt_(b64, mime) {
 /* ---------- save: เก็บรูปลง Drive + เขียนแถวลงชีต ---------- */
 function saveRecord_(r) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
+  if (r.type === 'cod') return saveCod_(ss, r);
   const isBuy = r.type === 'buy';
   const sh = ss.getSheetByName(isBuy ? TAB_BUY : TAB_EXP);
   const d = r.date ? new Date(r.date + 'T00:00:00+07:00') : new Date();
@@ -135,6 +152,70 @@ function saveRecord_(r) {
   if (r.taxId) sh.getRange(row, isBuy ? 15 : 13).setNumberFormat('@');
 
   return { ok: true, row: row, tab: sh.getName(), photoUrl: photoUrl, vat: hasVat ? +(total - total / 1.07).toFixed(2) : 0 };
+}
+
+/* COD: 1 ใบ → แถว COD + แถวขาย (ผูกด้วยเลขพัสดุ) + แถวค่าส่งในค่าใช้จ่าย (ถ้าจ่ายต้นทาง) */
+function saveCod_(ss, r) {
+  const tracking = String(r.tracking || '').trim();
+  if (!tracking) return { ok: false, error: 'ต้องมีเลขพัสดุ' };
+  const d = r.date ? new Date(r.date + 'T00:00:00+07:00') : new Date();
+  const cod = Number(r.codAmount) || 0, freight = Number(r.freight) || 0, codFee = Number(r.codFee) || 0, vat = Number(r.vat) || 0;
+  const paidNow = !!r.paidNow;
+  const hasVat = !!r.hasVat;
+  const shCod = ss.getSheetByName(TAB_COD);
+
+  // กันซ้ำด้วยเลขพัสดุ
+  const lastC = shCod.getLastRow();
+  if (lastC >= 2) {
+    const have = shCod.getRange(2, 3, lastC - 1, 1).getValues().map(x => String(x[0]).trim().toUpperCase());
+    const i = have.indexOf(tracking.toUpperCase());
+    if (i >= 0) return { ok: false, dup: true, where: TAB_COD + ' แถว ' + (i + 2) + ' (เลขพัสดุ ' + tracking + ')' };
+  }
+
+  // รูป
+  let photoUrl = '';
+  if (r.image) {
+    const ym = Utilities.formatDate(d, 'Asia/Bangkok', 'yyyy-MM'), ymd = Utilities.formatDate(d, 'Asia/Bangkok', 'yyyy-MM-dd');
+    const folder = getOrCreate_(getOrCreate_(DriveApp.getFolderById(FOLDER_ID), ym), hasVat ? SUB_VAT : SUB_OTHER);
+    const name = ymd + '_COD_' + (r.carrier || '') + '_' + tracking + '.jpg';
+    photoUrl = folder.createFile(Utilities.newBlob(Utilities.base64Decode(r.image), r.mime || 'image/jpeg', name)).getUrl();
+  }
+  const by = r.by ? 'จดผ่านไลน์: ' + r.by : '';
+
+  // 1) แถว COD: A วันที่ B ขนส่ง C เลขพัสดุ D ลูกค้า E สินค้า F ยอดCOD G ค่าส่ง H COD fee I VAT | J สูตร | K อ้างอิง L เงินเข้า M วันที่เงินเข้า N ยอดโอน | O สูตร | P รูป Q หมายเหตุ R ผู้บันทึก
+  const rowC = nextRow_(shCod);
+  shCod.getRange(rowC, 1, 1, 9).setValues([[d, r.carrier || '', tracking, r.customer || '', r.items || '', cod, freight, codFee, vat]]);
+  shCod.getRange(rowC, 11, 1, 4).setValues([[r.orderRef || '', false, '', '']]);
+  shCod.getRange(rowC, 16, 1, 3).setValues([[photoUrl, [paidNow ? 'จ่ายค่าส่งต้นทาง' : 'ขนส่งหักค่าส่งจากยอด COD', r.note].filter(Boolean).join(' | '), r.by || '']]);
+  shCod.getRange(rowC, 1).setNumberFormat('yyyy-mm-dd');
+  shCod.getRange(rowC, 3).setNumberFormat('@');
+
+  // 2) แถวขาย (เฉพาะที่มียอด COD): D = เลขพัสดุ, M/S ดึงจากแท็บ COD อัตโนมัติ
+  let rowS = 0;
+  if (cod > 0) {
+    const shS = ss.getSheetByName(TAB_SALE);
+    rowS = nextRow_(shS);
+    const m = "IFERROR(MATCH($D" + rowS + ",COD!$C:$C,0),0)";
+    shS.getRange(rowS, 1, 1, 9).setValues([[d, r.business || 'YANG Haus', r.channel || 'Facebook', tracking, r.customer || '', r.items || '', Number(r.qty) || '', cod, 'ไม่ออก']]);
+    shS.getRange(rowS, 13).setFormula('=IF(' + m + '>0,IF(INDEX(COD!$L:$L,' + m + ')=TRUE,INDEX(COD!$N:$N,' + m + '),""),"")');
+    shS.getRange(rowS, 15).setValue(0);
+    shS.getRange(rowS, 19).setFormula('=IF(' + m + '>0,INDEX(COD!$L:$L,' + m + ')=TRUE,FALSE)');
+    shS.getRange(rowS, 20).setValue(['COD ' + (r.carrier || '') + ' ' + tracking, by].filter(Boolean).join(' | '));
+    shS.getRange(rowS, 1).setNumberFormat('yyyy-mm-dd');
+    shS.getRange(rowS, 4).setNumberFormat('@');
+  }
+
+  // 3) แถวค่าส่งในค่าใช้จ่าย (เฉพาะจ่ายเงินสดต้นทาง) ผูกเลขพัสดุ → ไปโผล่ในกำไรต่อออเดอร์
+  let rowE = 0;
+  const paid = paidNow ? (Number(r.totalPaid) || (freight + codFee + vat)) : 0;
+  if (paid > 0) {
+    const shE = ss.getSheetByName(TAB_EXP);
+    rowE = nextRow_(shE);
+    shE.getRange(rowE, 1, 1, 6).setValues([[d, r.business || 'YANG Haus', CAT_SHIP, 'ค่าส่ง COD ' + (r.carrier || '') + ' ' + tracking + (r.customer ? ' → ' + r.customer : ''), paid, hasVat]]);
+    shE.getRange(rowE, 9, 1, 6).setValues([[r.carrier || '', tracking, ['COD', by].filter(Boolean).join(' | '), r.receiptNo || '', r.taxId || '', photoUrl]]);
+    shE.getRange(rowE, 1).setNumberFormat('yyyy-mm-dd');
+  }
+  return { ok: true, tab: TAB_COD, row: rowC, saleRow: rowS, expRow: rowE, paid: paid, photoUrl: photoUrl };
 }
 
 function findDuplicate_(ss, invNo, d, vendor, total) {

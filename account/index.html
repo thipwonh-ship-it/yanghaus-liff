@@ -14,7 +14,7 @@
   .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
   h2{font-size:15px;margin:0 0 10px;color:var(--navy)}
   .seg{display:flex;gap:8px}
-  .seg button{flex:1;padding:14px 8px;font-size:16px;border:2px solid var(--line);background:#fff;border-radius:10px}
+  .seg button{flex:1;padding:14px 4px;font-size:15px;border:2px solid var(--line);background:#fff;border-radius:10px}
   .seg button.on{border-color:var(--navy);background:#e8edf7;font-weight:700}
   .big{display:block;width:100%;padding:16px;font-size:17px;font-weight:700;border:0;border-radius:10px;background:var(--navy);color:#fff;margin-top:10px}
   .big.alt{background:#fff;color:var(--navy);border:2px solid var(--navy)}
@@ -47,7 +47,8 @@
     <h2>1. รายการนี้คืออะไร</h2>
     <div class="seg">
       <button id="tExp" class="on" onclick="setType('exp')">💸 ค่าใช้จ่าย</button>
-      <button id="tBuy" onclick="setType('buy')">🛞 ซื้อยาง/ล้อ (ต้นทุน)</button>
+      <button id="tBuy" onclick="setType('buy')">🛞 ซื้อยาง/ล้อ</button>
+      <button id="tCod" onclick="setType('cod')">📦 ส่ง COD</button>
     </div>
     <div class="hint" id="tHint">ค่าแท็กซี่ Lalamove อุปกรณ์ ค่าโฆษณา บิลโทรศัพท์ ฯลฯ</div>
   </div>
@@ -69,6 +70,38 @@
   </div>
   <div class="card">
     <h2>3. ตรวจแล้วแก้ได้เลย</h2>
+    <div id="gCod" class="hide">
+      <div class="row">
+        <div><label>วันที่ส่ง</label><input id="cDate" type="date"></div>
+        <div><label>ขนส่ง</label><select id="cCarrier" onchange="codCalc()"></select></div>
+      </div>
+      <label>เลขพัสดุ</label><input id="cTrack" type="text" placeholder="TH2301… / OT6924638">
+      <div class="row">
+        <div><label>ลูกค้า (ผู้รับ)</label><input id="cCust" type="text"></div>
+        <div><label>ช่องทางขาย</label><select id="cChannel"><option>Facebook</option><option>ขายส่ง</option><option>อื่นๆ</option></select></div>
+      </div>
+      <label>สินค้า</label><input id="cItems" type="text">
+      <div class="row">
+        <div><label>ยอด COD เก็บจากลูกค้า</label><input id="cCod" type="number" step="0.01" inputmode="decimal" oninput="codCalc(true)"></div>
+        <div><label>จำนวน (เส้น/วง)</label><input id="cQty" type="number" inputmode="numeric"></div>
+      </div>
+      <div class="row">
+        <div><label>ค่าส่ง</label><input id="cFreight" type="number" step="0.01" inputmode="decimal" oninput="codCalc()"></div>
+        <div><label>ค่าธรรมเนียม COD</label><input id="cFee" type="number" step="0.01" inputmode="decimal" oninput="codCalc(false,true)"></div>
+        <div><label>VAT ในใบ</label><input id="cVat" type="number" step="0.01" inputmode="decimal" oninput="codCalc()"></div>
+      </div>
+      <div class="hint" id="cHint"></div>
+      <div class="chk"><input id="cPaid" type="checkbox" checked onchange="codCalc()"><span>จ่ายค่าส่งเป็นเงินสดที่ต้นทางแล้ว <span id="cPaidSum" class="hint" style="display:inline"></span></span></div>
+      <div class="hint">ติ๊กออกถ้าขนส่งหักค่าส่งจากยอด COD ตอนโอนให้ (จะไม่ลงค่าใช้จ่ายซ้ำ)</div>
+      <div class="chk"><input id="cHasVat" type="checkbox"><span>ใบนี้เป็นใบกำกับภาษี (เคลม VAT ซื้อได้)</span></div>
+      <div class="row">
+        <div><label>เลขที่ใบเสร็จ (ถ้ามี)</label><input id="cRcpt" type="text"></div>
+        <div><label>เลขผู้เสียภาษีขนส่ง</label><input id="cTax" type="text" inputmode="numeric" maxlength="13"></div>
+      </div>
+      <label>อ้างอิงบิล/ออเดอร์ของเรา (ถ้ามี)</label><input id="cRef" type="text">
+      <label>หมายเหตุ</label><input id="cNote" type="text">
+    </div>
+    <div id="gGen">
     <div class="row">
       <div><label>วันที่ในใบเสร็จ</label><input id="fDate" type="date"></div>
       <div><label>ธุรกิจ</label><select id="fBiz"></select></div>
@@ -93,6 +126,7 @@
     </div>
     <label>อ้างอิงเลขออเดอร์ขาย (ถ้าซื้อให้ออเดอร์ไหน)</label><input id="fOrder" type="text" placeholder="เช่น 2609141234ABCD">
     <label>หมายเหตุ</label><input id="fNote" type="text">
+    </div>
     <button class="big" id="btnSave" onclick="save()">💾 บันทึกลงชีท</button>
     <button class="big alt" onclick="reset()">↩︎ ถ่ายใหม่</button>
     <div id="msg"></div>
@@ -129,11 +163,12 @@ async function init() {
   try { cfg = JSON.parse(localStorage.getItem('yh_cfg') || 'null'); } catch (e) {}
   if (cfg) fillConfig();
   post({ action: 'config' }).then(c => { if (c.ok) { cfg = c; hasAI = c.hasAI; localStorage.setItem('yh_cfg', JSON.stringify(c)); fillConfig(); } });
-  $('fDate').value = today();
+  $('fDate').value = today(); $('cDate').value = today();
 }
 function fillConfig() {
   fill($('fBiz'), cfg.business, 'YANG Haus');
   fill($('fCat'), cfg.categories, 'อื่นๆ');
+  fill($('cCarrier'), cfg.carriers || ['Flash', 'NNP', 'อื่นๆ'], 'Flash');
   $('supList').innerHTML = (cfg.suppliers || []).map(s => `<option value="${s}">`).join('');
 }
 function fill(sel, arr, def) { const v = sel.value; sel.innerHTML = (arr || []).map(x => `<option>${x}</option>`).join(''); sel.value = (arr || []).includes(v) ? v : def; }
@@ -141,8 +176,11 @@ function today() { const d = new Date(); return d.getFullYear() + '-' + String(d
 
 function setType(t) {
   type = t;
-  $('tExp').classList.toggle('on', t === 'exp'); $('tBuy').classList.toggle('on', t === 'buy');
-  $('tHint').textContent = t === 'buy' ? 'สินค้าที่ซื้อจากซัพพลายเออร์เพื่อขายต่อ (มีหรือไม่มีใบกำกับก็ได้)' : 'ค่าแท็กซี่ Lalamove อุปกรณ์ ค่าโฆษณา บิลโทรศัพท์ ฯลฯ';
+  $('tExp').classList.toggle('on', t === 'exp'); $('tBuy').classList.toggle('on', t === 'buy'); $('tCod').classList.toggle('on', t === 'cod');
+  $('tHint').textContent = t === 'buy' ? 'สินค้าที่ซื้อจากซัพพลายเออร์เพื่อขายต่อ (มีหรือไม่มีใบกำกับก็ได้)'
+    : t === 'cod' ? 'ใบเสร็จ/ใบปะหน้า Flash NNP J&T ที่ส่งแบบเก็บเงินปลายทาง → ลงทะเบียน COD + ขาย + ค่าส่ง ในครั้งเดียว'
+    : 'ค่าแท็กซี่ Lalamove อุปกรณ์ ค่าโฆษณา บิลโทรศัพท์ ฯลฯ';
+  $('gCod').classList.toggle('hide', t !== 'cod'); $('gGen').classList.toggle('hide', t === 'cod');
   $('gExp').classList.toggle('hide', t === 'buy'); $('gBuy').classList.toggle('hide', t !== 'buy'); $('gQty').classList.toggle('hide', t !== 'buy');
   $('lVendor').textContent = t === 'buy' ? 'ซัพพลายเออร์' : 'ผู้ขาย / ร้าน';
   $('lItems').textContent = t === 'buy' ? 'สินค้า (รุ่น/ขนาด)' : 'รายละเอียด';
@@ -157,9 +195,28 @@ async function gotPhoto(inp) {
   $('s1').classList.add('hide'); $('s2').classList.remove('hide'); $('msg').innerHTML = ''; window.scrollTo(0, 0);
   $('aiBox').className = 'ai'; $('aiBox').innerHTML = '<span class="spin"></span>AI กำลังอ่านใบเสร็จ…';
   if (!hasAI) { $('aiBox').innerHTML = 'ยังไม่ได้ตั้งค่า AI — กรอกเองได้เลย'; return; }
-  const r = await post({ action: 'read', image: imgB64, mime: imgMime });
+  const r = await post({ action: 'read', image: imgB64, mime: imgMime, type });
   if (!r.ok || r.noai || !r.data) { $('aiBox').innerHTML = 'อ่านอัตโนมัติไม่ได้ กรอกเองได้เลย' + (r.error ? ' (' + r.error + ')' : ''); return; }
   const d = r.data;
+  if (type === 'cod') {
+    if (d.date) $('cDate').value = d.date;
+    if (d.carrier && cfg && (cfg.carriers || []).includes(d.carrier)) $('cCarrier').value = d.carrier;
+    else if (d.carrier) { const c = (cfg.carriers || []).find(x => d.carrier.toLowerCase().includes(x.toLowerCase())); if (c) $('cCarrier').value = c; }
+    if (d.tracking) $('cTrack').value = String(d.tracking).replace(/\s/g, '');
+    if (d.customer) $('cCust').value = d.customer;
+    if (d.items) $('cItems').value = d.items;
+    if (d.cod_amount) $('cCod').value = Number(d.cod_amount).toFixed(2);
+    if (d.freight) $('cFreight').value = Number(d.freight).toFixed(2);
+    if (d.cod_fee) $('cFee').value = Number(d.cod_fee).toFixed(2);
+    if (d.vat) $('cVat').value = Number(d.vat).toFixed(2);
+    if (d.receipt_no) $('cRcpt').value = d.receipt_no;
+    if (d.seller_tax_id) $('cTax').value = String(d.seller_tax_id).replace(/\D/g, '');
+    $('cPaid').checked = !(Number(d.total_paid) === 0 && Number(d.freight) > 0);
+    codCalc(false, true);
+    $('aiBox').className = 'ai good';
+    $('aiBox').textContent = 'AI อ่านให้แล้ว (' + Math.round((d.confidence || 0) * 100) + '%) — เช็คเลขพัสดุ ยอด COD ค่าส่ง ก่อนกดบันทึก';
+    return;
+  }
   if (d.date) $('fDate').value = d.date;
   if (d.vendor) $('fVendor').value = d.vendor;
   if (d.invoice_no) $('fInv').value = d.invoice_no;
@@ -172,6 +229,21 @@ async function gotPhoto(inp) {
   catChanged(); vatCalc();
   $('aiBox').className = 'ai good';
   $('aiBox').textContent = 'AI อ่านให้แล้ว (' + Math.round((d.confidence || 0) * 100) + '%) — เช็คยอดกับใบจริงก่อนกดบันทึก';
+}
+
+const COD_FEE_RATE = { 'Flash': 0.03 };
+function codCalc(fromCod, fromFee) {
+  const carrier = $('cCarrier').value, rate = COD_FEE_RATE[carrier] || 0;
+  const cod = Number($('cCod').value) || 0, fee = Number($('cFee').value) || 0;
+  let hint = '';
+  if (rate) {
+    if (fromFee && fee && !cod) { $('cCod').value = Math.round(fee / rate); hint = carrier + ' คิด COD fee ' + (rate * 100) + '% → ยอด COD = ' + fee.toFixed(2) + ' ÷ ' + (rate * 100) + '% = ' + Math.round(fee / rate).toLocaleString(); }
+    else if (fromCod && cod && !fee) { $('cFee').value = (cod * rate).toFixed(2); hint = carrier + ' คิด COD fee ' + (rate * 100) + '% ของยอด COD = ' + (cod * rate).toFixed(2); }
+    else if (cod && fee && Math.abs(cod * rate - fee) > 1) hint = '⚠️ ' + carrier + ' ปกติ COD fee = ' + (rate * 100) + '% ของยอด COD (' + (cod * rate).toFixed(2) + ') แต่ในใบ ' + fee.toFixed(2) + ' — เช็คอีกที';
+  }
+  $('cHint').textContent = hint;
+  const paid = (Number($('cFreight').value) || 0) + (Number($('cFee').value) || 0) + (Number($('cVat').value) || 0);
+  $('cPaidSum').textContent = $('cPaid').checked && paid ? '→ ลงค่าใช้จ่าย ' + paid.toFixed(2) : '';
 }
 
 function catChanged() {
@@ -188,6 +260,7 @@ function vatCalc() {
 $('fTotal').addEventListener('input', vatCalc); $('fVat').addEventListener('change', vatCalc);
 
 async function save() {
+  if (type === 'cod') return saveCod();
   const total = Number($('fTotal').value);
   if (!total) return show('ใส่ยอดรวมก่อนค่ะ', 'err');
   if (!$('fDate').value) return show('ใส่วันที่ก่อนค่ะ', 'err');
@@ -217,9 +290,43 @@ async function save() {
   try { if (liff.isInClient()) await liff.sendMessages([{ type: 'text', text: lines.join('\n') }]); } catch (e) {}
 }
 
+async function saveCod() {
+  const tracking = $('cTrack').value.trim();
+  if (!tracking) return show('ใส่เลขพัสดุก่อนค่ะ', 'err');
+  if (!$('cDate').value) return show('ใส่วันที่ก่อนค่ะ', 'err');
+  const cod = Number($('cCod').value) || 0;
+  if (!cod && !confirm('ยอด COD เป็น 0 — พัสดุนี้ไม่ใช่เก็บเงินปลายทางใช่ไหม? (จะลงแค่ค่าส่ง ไม่ลงแถวขาย)')) return;
+  $('btnSave').disabled = true; show('<span class="spin"></span>กำลังบันทึก + เก็บรูปลง Drive…', '');
+  const freight = Number($('cFreight').value) || 0, fee = Number($('cFee').value) || 0, vat = Number($('cVat').value) || 0;
+  const body = {
+    action: 'save', type: 'cod', image: imgB64, mime: imgMime,
+    date: $('cDate').value, business: 'YANG Haus', carrier: $('cCarrier').value, tracking, customer: $('cCust').value.trim(),
+    channel: $('cChannel').value, items: $('cItems').value.trim(), qty: $('cQty').value, codAmount: cod,
+    freight, codFee: fee, vat, totalPaid: freight + fee + vat, paidNow: $('cPaid').checked, hasVat: $('cHasVat').checked,
+    receiptNo: $('cRcpt').value.trim(), taxId: $('cTax').value.trim(), orderRef: $('cRef').value.trim(), note: $('cNote').value.trim(),
+    by: profile ? profile.displayName : ''
+  };
+  const r = await post(body);
+  $('btnSave').disabled = false;
+  if (r.dup) return show('⛔ เลขพัสดุนี้บันทึกไปแล้ว ไม่รับซ้ำ → ' + r.where, 'err');
+  if (!r.ok) return show('บันทึกไม่สำเร็จ: ' + (r.error || ''), 'err');
+  const lines = [
+    '📦 COD ' + body.carrier + ' ' + tracking + ' → แท็บ COD แถว ' + r.row,
+    body.date + ' · ' + (body.customer || '-') + (body.items ? ' · ' + body.items : ''),
+    cod ? 'ยอด COD ' + cod.toFixed(2) + ' (รอเงินเข้า) → ลงขายแถว ' + r.saleRow : 'ไม่มียอด COD',
+    r.paid ? 'ค่าส่ง+ธรรมเนียม ' + r.paid.toFixed(2) + ' → ลงค่าใช้จ่ายแถว ' + r.expRow : 'ค่าส่งหักจากยอด COD',
+    r.photoUrl ? 'รูป: ' + r.photoUrl : ''
+  ].filter(Boolean);
+  $('sumBox').innerHTML = lines.map(l => l.replace(/^(.+?)( → .+)$/, '<b>$1</b>$2')).join('<br>');
+  $('s2').classList.add('hide'); $('s3').classList.remove('hide'); window.scrollTo(0, 0);
+  try { if (liff.isInClient()) await liff.sendMessages([{ type: 'text', text: lines.join('\n') }]); } catch (e) {}
+}
+
 function show(html, cls) { $('msg').innerHTML = '<div class="msg ' + cls + '">' + html + '</div>'; }
 function reset() {
   imgB64 = ''; ['fVendor', 'fInv', 'fTax', 'fItems', 'fTotal', 'fQty', 'fShip', 'fOrder', 'fNote'].forEach(i => $(i).value = '');
+  ['cTrack', 'cCust', 'cItems', 'cCod', 'cQty', 'cFreight', 'cFee', 'cVat', 'cRcpt', 'cTax', 'cRef', 'cNote'].forEach(i => $(i).value = '');
+  $('cPaid').checked = true; $('cHasVat').checked = false; $('cDate').value = today(); $('cHint').textContent = ''; $('cPaidSum').textContent = '';
   $('fVat').checked = false; $('fDate').value = today(); $('vatCalc').textContent = ''; $('vatNote').classList.add('hide');
   $('s2').classList.add('hide'); $('s3').classList.add('hide'); $('s1').classList.remove('hide'); window.scrollTo(0, 0);
 }
