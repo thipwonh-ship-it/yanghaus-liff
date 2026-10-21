@@ -79,11 +79,18 @@ function readReceipt_(b64, mime) {
     method: 'post', contentType: 'application/json',
     payload: JSON.stringify(body), muteHttpExceptions: true
   });
-  if (res.getResponseCode() !== 200) return { ok: true, noai: true, error: 'Gemini ' + res.getResponseCode() };
-  const out = JSON.parse(res.getContentText());
-  const text = (((out.candidates || [])[0] || {}).content || {}).parts?.[0]?.text || '{}';
+  const code = res.getResponseCode(), raw = res.getContentText();
+  Logger.log('Gemini ' + code + ' ' + raw.slice(0, 500));
+  if (code !== 200) {
+    let m = ''; try { m = JSON.parse(raw).error.message; } catch (e) {}
+    return { ok: true, noai: true, error: 'Gemini ' + code + (m ? ': ' + m.slice(0, 120) : '') };
+  }
+  const out = JSON.parse(raw);
+  const cand = (out.candidates || [])[0] || {};
+  const text = ((cand.content || {}).parts || []).map(p => p.text || '').join('') || '';
+  if (!text) return { ok: true, noai: true, error: 'ไม่มีคำตอบ (' + (cand.finishReason || out.promptFeedback?.blockReason || '?') + ')' };
   let data = {};
-  try { data = JSON.parse(text.replace(/^```json|```$/g, '').trim()); } catch (e) { return { ok: true, noai: true, error: 'parse' }; }
+  try { data = JSON.parse(text.replace(/^```json|```$/g, '').trim()); } catch (e) { return { ok: true, noai: true, error: 'parse: ' + text.slice(0, 80) }; }
   return { ok: true, data: data };
 }
 
@@ -157,3 +164,16 @@ function json_(o) {
 
 /* ทดสอบใน editor: เลือก testConfig แล้วกด Run (ครั้งแรกจะขอสิทธิ์) */
 function testConfig() { Logger.log(JSON.stringify(getConfig_())); }
+
+/* ทดสอบคีย์ + รุ่นโมเดล Gemini โดยไม่ต้องใช้รูป: เลือก testGemini แล้วกด Run ดู Execution log */
+function testGemini() {
+  const key = geminiKey_();
+  if (!key) { Logger.log('ไม่พบ GEMINI_API_KEY ใน Script properties'); return; }
+  Logger.log('key ขึ้นต้น ' + key.slice(0, 6) + '… ยาว ' + key.length);
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent?key=' + key;
+  const res = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+    payload: JSON.stringify({ contents: [{ parts: [{ text: 'ตอบคำว่า OK' }] }] }) });
+  Logger.log('HTTP ' + res.getResponseCode() + ' → ' + res.getContentText().slice(0, 400));
+  const list = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models?key=' + key, { muteHttpExceptions: true });
+  Logger.log('models: ' + list.getContentText().replace(/\s+/g, ' ').slice(0, 400));
+}
