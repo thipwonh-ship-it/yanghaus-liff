@@ -32,6 +32,8 @@ function doPost(e) {
       case 'config': return json_(getConfig_());
       case 'read':   return json_(readReceipt_(req.image, req.mime, req.type));
       case 'save':   return json_(saveRecord_(req));
+      case 'codPending': return json_(codPending_());
+      case 'codPaid':    return json_(codPaid_(req.items, req.by));
       default:       return json_({ ok: false, error: 'unknown action' });
     }
   } catch (err) {
@@ -152,6 +154,39 @@ function saveRecord_(r) {
   if (r.taxId) sh.getRange(row, isBuy ? 15 : 13).setNumberFormat('@');
 
   return { ok: true, row: row, tab: sh.getName(), photoUrl: photoUrl, vat: hasVat ? +(total - total / 1.07).toFixed(2) : 0 };
+}
+
+/* รายการ COD ที่ยังไม่ได้เงิน (L = FALSE) */
+function codPending_() {
+  const sh = SpreadsheetApp.openById(SHEET_ID).getSheetByName(TAB_COD);
+  const last = sh.getLastRow();
+  if (last < 2) return { ok: true, items: [] };
+  const v = sh.getRange(2, 1, last - 1, 12).getValues();
+  const items = [];
+  v.forEach((row, i) => {
+    if (!row[2] || row[11] === true) return;
+    items.push({ row: i + 2, date: row[0] instanceof Date ? Utilities.formatDate(row[0], 'Asia/Bangkok', 'yyyy-MM-dd') : String(row[0]),
+      carrier: row[1], tracking: String(row[2]), customer: row[3], items: row[4], cod: Number(row[5]) || 0 });
+  });
+  items.sort((a, b) => a.date < b.date ? -1 : 1);
+  return { ok: true, items: items, total: items.reduce((t, x) => t + x.cod, 0) };
+}
+
+/* ติ๊กเงินเข้า: items = [{row, tracking, amount, date}] */
+function codPaid_(items, by) {
+  const sh = SpreadsheetApp.openById(SHEET_ID).getSheetByName(TAB_COD);
+  let n = 0, sum = 0; const skipped = [];
+  (items || []).forEach(it => {
+    const row = Number(it.row);
+    const cur = sh.getRange(row, 3).getValue();
+    if (String(cur).trim() !== String(it.tracking).trim()) { skipped.push(it.tracking); return; }   // แถวเลื่อน → ไม่แตะ
+    const d = it.date ? new Date(it.date + 'T00:00:00+07:00') : new Date();
+    sh.getRange(row, 12, 1, 3).setValues([[true, d, Number(it.amount) || 0]]);
+    sh.getRange(row, 13).setNumberFormat('yyyy-mm-dd');
+    if (by) { const q = sh.getRange(row, 17); q.setValue([q.getValue(), 'เงินเข้า: ' + by].filter(Boolean).join(' | ')); }
+    n++; sum += Number(it.amount) || 0;
+  });
+  return { ok: true, count: n, sum: sum, skipped: skipped };
 }
 
 /* COD: 1 ใบ → แถว COD + แถวขาย (ผูกด้วยเลขพัสดุ) + แถวค่าส่งในค่าใช้จ่าย (ถ้าจ่ายต้นทาง) */

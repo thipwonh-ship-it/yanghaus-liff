@@ -35,6 +35,10 @@
   @keyframes s{to{transform:rotate(360deg)}}
   .sum{font-size:15px;line-height:1.7}
   .sum b{color:var(--navy)}
+  .pi{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--line)}
+  .pi input[type=checkbox]{width:24px;height:24px;flex:none}
+  .pi .t{flex:1;font-size:14px;line-height:1.4}.pi .t b{display:block;font-size:15px}
+  .pi input[type=number]{width:100px;padding:8px;font-size:15px;border:1px solid var(--line);border-radius:8px;text-align:right}
 </style>
 </head>
 <body>
@@ -51,6 +55,9 @@
       <button id="tCod" onclick="setType('cod')">📦 ส่ง COD</button>
     </div>
     <div class="hint" id="tHint">ค่าแท็กซี่ Lalamove อุปกรณ์ ค่าโฆษณา บิลโทรศัพท์ ฯลฯ</div>
+  </div>
+  <div class="card" style="padding:10px 14px">
+    <button class="big alt" style="margin:0" onclick="openPaid()">💰 เงิน COD เข้าแล้ว — ติ๊กรายการ</button>
   </div>
   <div class="card">
     <h2>2. ถ่ายรูปใบเสร็จ / ใบกำกับภาษี</h2>
@@ -130,6 +137,19 @@
     <button class="big" id="btnSave" onclick="save()">💾 บันทึกลงชีท</button>
     <button class="big alt" onclick="reset()">↩︎ ถ่ายใหม่</button>
     <div id="msg"></div>
+  </div>
+</section>
+
+<!-- COD เงินเข้า -->
+<section id="s4" class="hide">
+  <div class="card">
+    <h2>💰 COD ที่ยังไม่ได้เงิน</h2>
+    <div id="pList"><span class="spin"></span>กำลังโหลด…</div>
+    <label>วันที่เงินเข้า (ใช้กับทุกชิ้นที่ติ๊ก)</label><input id="pDate" type="date">
+    <div class="hint">ติ๊กชิ้นที่ขนส่งโอนมาแล้ว แก้ยอดได้ถ้าโอนมาไม่เท่ายอด COD</div>
+    <button class="big" id="btnPaid" onclick="savePaid()">✅ บันทึกเงินเข้า</button>
+    <button class="big alt" onclick="reset()">↩︎ กลับ</button>
+    <div id="pMsg"></div>
   </div>
 </section>
 
@@ -322,13 +342,40 @@ async function saveCod() {
   try { if (liff.isInClient()) await liff.sendMessages([{ type: 'text', text: lines.join('\n') }]); } catch (e) {}
 }
 
+let pending = [];
+async function openPaid() {
+  $('s1').classList.add('hide'); $('s4').classList.remove('hide'); window.scrollTo(0, 0);
+  $('pDate').value = today(); $('pMsg').innerHTML = '';
+  $('pList').innerHTML = '<span class="spin"></span>กำลังโหลด…';
+  const r = await post({ action: 'codPending' });
+  if (!r.ok) { $('pList').innerHTML = '<div class="msg err">โหลดไม่ได้: ' + (r.error || '') + '</div>'; return; }
+  pending = r.items || [];
+  if (!pending.length) { $('pList').innerHTML = '<div class="msg ok">ไม่มี COD ค้างรับ 🎉</div>'; return; }
+  $('pList').innerHTML = '<div class="hint">ค้างรับ ' + pending.length + ' ชิ้น รวม ' + r.total.toLocaleString(undefined, { minimumFractionDigits: 2 }) + ' บาท</div>' +
+    pending.map((x, i) => `<div class="pi"><input type="checkbox" id="pc${i}"><div class="t"><b>${x.tracking} · ${x.carrier}</b>${x.date} · ${x.customer || '-'}${x.items ? ' · ' + x.items : ''}</div><input type="number" id="pa${i}" step="0.01" value="${x.cod.toFixed(2)}"></div>`).join('');
+}
+async function savePaid() {
+  const items = pending.map((x, i) => $('pc' + i) && $('pc' + i).checked ? { row: x.row, tracking: x.tracking, amount: Number($('pa' + i).value) || 0, date: $('pDate').value } : null).filter(Boolean);
+  if (!items.length) return ($('pMsg').innerHTML = '<div class="msg err">ยังไม่ได้ติ๊กรายการ</div>');
+  $('btnPaid').disabled = true; $('pMsg').innerHTML = '<div class="msg"><span class="spin"></span>กำลังบันทึก…</div>';
+  const r = await post({ action: 'codPaid', items, by: profile ? profile.displayName : '' });
+  $('btnPaid').disabled = false;
+  if (!r.ok) return ($('pMsg').innerHTML = '<div class="msg err">ไม่สำเร็จ: ' + (r.error || '') + '</div>');
+  const lines = ['💰 เงิน COD เข้า ' + r.count + ' ชิ้น รวม ' + r.sum.toLocaleString(undefined, { minimumFractionDigits: 2 }) + ' บาท (' + $('pDate').value + ')']
+    .concat(items.map(x => '• ' + x.tracking + ' ' + x.amount.toFixed(2)));
+  if (r.skipped && r.skipped.length) lines.push('⚠️ ข้าม (แถวในชีทเลื่อน): ' + r.skipped.join(', '));
+  $('sumBox').innerHTML = lines.join('<br>');
+  $('s4').classList.add('hide'); $('s3').classList.remove('hide'); window.scrollTo(0, 0);
+  try { if (liff.isInClient()) await liff.sendMessages([{ type: 'text', text: lines.join('\n') }]); } catch (e) {}
+}
+
 function show(html, cls) { $('msg').innerHTML = '<div class="msg ' + cls + '">' + html + '</div>'; }
 function reset() {
   imgB64 = ''; ['fVendor', 'fInv', 'fTax', 'fItems', 'fTotal', 'fQty', 'fShip', 'fOrder', 'fNote'].forEach(i => $(i).value = '');
   ['cTrack', 'cCust', 'cItems', 'cCod', 'cQty', 'cFreight', 'cFee', 'cVat', 'cRcpt', 'cTax', 'cRef', 'cNote'].forEach(i => $(i).value = '');
   $('cPaid').checked = true; $('cHasVat').checked = false; $('cDate').value = today(); $('cHint').textContent = ''; $('cPaidSum').textContent = '';
   $('fVat').checked = false; $('fDate').value = today(); $('vatCalc').textContent = ''; $('vatNote').classList.add('hide');
-  $('s2').classList.add('hide'); $('s3').classList.add('hide'); $('s1').classList.remove('hide'); window.scrollTo(0, 0);
+  $('s2').classList.add('hide'); $('s3').classList.add('hide'); $('s4').classList.add('hide'); $('s1').classList.remove('hide'); window.scrollTo(0, 0);
 }
 function closeApp() { try { liff.closeWindow(); } catch (e) { window.close(); } }
 
