@@ -187,13 +187,13 @@ function vatCalc() {
 }
 $('fTotal').addEventListener('input', vatCalc); $('fVat').addEventListener('change', vatCalc);
 
-async function save(force) {
+async function save() {
   const total = Number($('fTotal').value);
   if (!total) return show('ใส่ยอดรวมก่อนค่ะ', 'err');
   if (!$('fDate').value) return show('ใส่วันที่ก่อนค่ะ', 'err');
   $('btnSave').disabled = true; show('<span class="spin"></span>กำลังบันทึก + เก็บรูปลง Drive…', '');
   const body = {
-    action: 'save', type, force: !!force, image: imgB64, mime: imgMime,
+    action: 'save', type, image: imgB64, mime: imgMime,
     date: $('fDate').value, business: $('fBiz').value, vendor: $('fVendor').value.trim(),
     invoiceNo: $('fInv').value.trim(), taxId: $('fTax').value.trim(), category: $('fCat').value,
     items: $('fItems').value.trim(), total, qty: $('fQty').value, hasVat: $('fVat').checked,
@@ -202,7 +202,7 @@ async function save(force) {
   };
   const r = await post(body);
   $('btnSave').disabled = false;
-  if (r.dup) { if (confirm('เลขที่ ' + r.invoiceNo + ' เคยบันทึกแล้ว บันทึกซ้ำอีกใบไหม?')) return save(true); return show('ยกเลิก ไม่ได้บันทึก', 'err'); }
+  if (r.dup) return show('⛔ ใบนี้บันทึกไปแล้ว ไม่รับซ้ำ → ' + r.where + '<br><span class="hint">ถ้าเป็นคนละใบจริงๆ ให้ใส่เลขที่ใบเสร็จให้ต่างกัน หรือแก้ในชีทโดยตรง</span>', 'err');
   if (!r.ok) return show('บันทึกไม่สำเร็จ: ' + (r.error || ''), 'err');
   const lines = [
     '🧾 จดบัญชีแล้ว → แท็บ ' + r.tab + ' แถว ' + r.row,

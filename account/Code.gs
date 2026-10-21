@@ -101,15 +101,9 @@ function saveRecord_(r) {
   const hasVat = !!r.hasVat;
   const invNo = String(r.invoiceNo || '').trim();
 
-  // กันบันทึกซ้ำ (เลขที่ใบกำกับเดิมในแท็บเดียวกัน)
-  if (invNo && !r.force) {
-    const invCol = isBuy ? 10 : 12;   // ซื้อ!J / ค่าใช้จ่าย!L
-    const last = sh.getLastRow();
-    if (last >= 2) {
-      const vals = sh.getRange(2, invCol, last - 1, 1).getValues().map(x => String(x[0]).trim());
-      if (vals.indexOf(invNo) >= 0) return { ok: false, dup: true, invoiceNo: invNo };
-    }
-  }
+  // กันบันทึกซ้ำ (ปฏิเสธ ไม่ถาม): 1) เลขที่ใบกำกับซ้ำในแท็บไหนก็ได้  2) วันที่+ผู้ขาย+ยอด เท่ากัน
+  const dup = findDuplicate_(ss, invNo, d, r.vendor, total);
+  if (dup) return { ok: false, dup: true, where: dup };
 
   // 1) เก็บรูป
   let photoUrl = '';
@@ -141,6 +135,32 @@ function saveRecord_(r) {
   if (r.taxId) sh.getRange(row, isBuy ? 15 : 13).setNumberFormat('@');
 
   return { ok: true, row: row, tab: sh.getName(), photoUrl: photoUrl, vat: hasVat ? +(total - total / 1.07).toFixed(2) : 0 };
+}
+
+function findDuplicate_(ss, invNo, d, vendor, total) {
+  const ymd = Utilities.formatDate(d, 'Asia/Bangkok', 'yyyy-MM-dd');
+  const norm = v => String(v || '').replace(/\s+/g, '').toLowerCase();
+  const tabs = [
+    { name: TAB_EXP, inv: 12, vendor: 9, total: 5 },   // ค่าใช้จ่าย: L, I, E
+    { name: TAB_BUY, inv: 10, vendor: 3, total: 6 }    // ซื้อ: J, C, F
+  ];
+  for (const t of tabs) {
+    const sh = ss.getSheetByName(t.name);
+    const last = sh.getLastRow();
+    if (last < 2) continue;
+    const vals = sh.getRange(2, 1, last - 1, 12).getValues();
+    for (let i = 0; i < vals.length; i++) {
+      const row = vals[i];
+      if (row[0] === '' || row[0] === null) continue;
+      const rowInv = String(row[t.inv - 1] || '').trim();
+      if (invNo && rowInv && norm(rowInv) === norm(invNo))
+        return t.name + ' แถว ' + (i + 2) + ' (เลขที่ ' + rowInv + ')';
+      const rowDate = row[0] instanceof Date ? Utilities.formatDate(row[0], 'Asia/Bangkok', 'yyyy-MM-dd') : String(row[0]);
+      if (rowDate === ymd && Math.abs(Number(row[t.total - 1]) - total) < 0.005 && norm(row[t.vendor - 1]) === norm(vendor))
+        return t.name + ' แถว ' + (i + 2) + ' (วันที่/ผู้ขาย/ยอด เท่ากัน)';
+    }
+  }
+  return '';
 }
 
 function nextRow_(sh) {
