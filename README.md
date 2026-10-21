@@ -74,3 +74,6 @@ A วันที่ | B เวลา | C ผู้ส่ง | D ขนส่ง
 
 ## บัญชีที่ใช้
 Google: thipwon.h@gmail.com (เจ้าของชีต/Drive/Apps Script) · GitHub: thipwonh-ship-it · LINE Developers: บัญชีไลน์ของ Thipwon
+
+## account/ — จดบัญชีผ่าน LINE
+ระบบที่ 2 ในไลน์เดียวกัน: ถ่ายรูปใบเสร็จ → ลงชีทบัญชี + เก็บรูปใน Drive ดู [account/README.md](account/README.md)
