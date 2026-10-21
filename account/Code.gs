@@ -9,7 +9,8 @@
  */
 const SHEET_ID  = '17gY8l9pkJjIXqZWRfStYwga-xasJjef97HaHfI7KIB4';
 const FOLDER_ID = '1Pfy5Bo6vfkxWDyglsAJwDhg9rh5pajV-';   // โฟลเดอร์ ส่งบัญชี
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODELS = ['gemini-3.6-flash', 'gemini-3-flash', 'gemini-2.5-flash'];   // ลองตามลำดับ ถ้า 404 ข้ามไปตัวถัดไป
+const GEMINI_MODEL = GEMINI_MODELS[0];
 
 const TAB_EXP = 'ค่าใช้จ่าย';
 const TAB_BUY = 'ซื้อ';
@@ -74,11 +75,7 @@ function readReceipt_(b64, mime) {
     ]}],
     generationConfig: { temperature: 0, responseMimeType: 'application/json' }
   };
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent?key=' + key;
-  const res = UrlFetchApp.fetch(url, {
-    method: 'post', contentType: 'application/json',
-    payload: JSON.stringify(body), muteHttpExceptions: true
-  });
+  const res = geminiFetch_(key, body);
   const code = res.getResponseCode(), raw = res.getContentText();
   Logger.log('Gemini ' + code + ' ' + raw.slice(0, 500));
   if (code !== 200) {
@@ -162,6 +159,20 @@ function json_(o) {
   return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
 }
 
+/* เรียก Gemini โดยลองทุกรุ่นใน GEMINI_MODELS จนกว่าจะไม่ 404 (จำรุ่นที่ใช้ได้ไว้) */
+function geminiFetch_(key, body) {
+  const props = PropertiesService.getScriptProperties();
+  const remembered = props.getProperty('GEMINI_MODEL_OK');
+  const order = remembered ? [remembered].concat(GEMINI_MODELS.filter(m => m !== remembered)) : GEMINI_MODELS;
+  let res = null;
+  for (const m of order) {
+    res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent?key=' + key,
+      { method: 'post', contentType: 'application/json', payload: JSON.stringify(body), muteHttpExceptions: true });
+    if (res.getResponseCode() !== 404) { if (m !== remembered) props.setProperty('GEMINI_MODEL_OK', m); return res; }
+  }
+  return res;
+}
+
 /* ทดสอบใน editor: เลือก testConfig แล้วกด Run (ครั้งแรกจะขอสิทธิ์) */
 function testConfig() { Logger.log(JSON.stringify(getConfig_())); }
 
@@ -170,9 +181,8 @@ function testGemini() {
   const key = geminiKey_();
   if (!key) { Logger.log('ไม่พบ GEMINI_API_KEY ใน Script properties'); return; }
   Logger.log('key ขึ้นต้น ' + key.slice(0, 6) + '… ยาว ' + key.length);
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent?key=' + key;
-  const res = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', muteHttpExceptions: true,
-    payload: JSON.stringify({ contents: [{ parts: [{ text: 'ตอบคำว่า OK' }] }] }) });
+  const res = geminiFetch_(key, { contents: [{ parts: [{ text: 'ตอบคำว่า OK' }] }] });
+  Logger.log('รุ่นที่ใช้: ' + PropertiesService.getScriptProperties().getProperty('GEMINI_MODEL_OK'));
   Logger.log('HTTP ' + res.getResponseCode() + ' → ' + res.getContentText().slice(0, 400));
   const list = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models?key=' + key, { muteHttpExceptions: true });
   Logger.log('models: ' + list.getContentText().replace(/\s+/g, ' ').slice(0, 400));
