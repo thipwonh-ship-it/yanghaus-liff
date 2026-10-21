@@ -212,7 +212,7 @@ async function gotPhoto(inp) {
     if (d.receipt_no) $('cRcpt').value = d.receipt_no;
     if (d.seller_tax_id) $('cTax').value = String(d.seller_tax_id).replace(/\D/g, '');
     $('cPaid').checked = !(Number(d.total_paid) === 0 && Number(d.freight) > 0);
-    codCalc(false, true);
+    codCalc(true, true);
     $('aiBox').className = 'ai good';
     $('aiBox').textContent = 'AI อ่านให้แล้ว (' + Math.round((d.confidence || 0) * 100) + '%) — เช็คเลขพัสดุ ยอด COD ค่าส่ง ก่อนกดบันทึก';
     return;
@@ -231,14 +231,14 @@ async function gotPhoto(inp) {
   $('aiBox').textContent = 'AI อ่านให้แล้ว (' + Math.round((d.confidence || 0) * 100) + '%) — เช็คยอดกับใบจริงก่อนกดบันทึก';
 }
 
-const COD_FEE_RATE = { 'Flash': 0.03 };
+const COD_FEE_RATE = { 'Flash': 0.03, 'NNP': 0.03 };   // COD fee = % ของยอด COD (NNP เก็บสดนอกใบเสร็จ)
 function codCalc(fromCod, fromFee) {
   const carrier = $('cCarrier').value, rate = COD_FEE_RATE[carrier] || 0;
   const cod = Number($('cCod').value) || 0, fee = Number($('cFee').value) || 0;
   let hint = '';
   if (rate) {
     if (fromFee && fee && !cod) { $('cCod').value = Math.round(fee / rate); hint = carrier + ' คิด COD fee ' + (rate * 100) + '% → ยอด COD = ' + fee.toFixed(2) + ' ÷ ' + (rate * 100) + '% = ' + Math.round(fee / rate).toLocaleString(); }
-    else if (fromCod && cod && !fee) { $('cFee').value = (cod * rate).toFixed(2); hint = carrier + ' คิด COD fee ' + (rate * 100) + '% ของยอด COD = ' + (cod * rate).toFixed(2); }
+    else if (fromCod && cod && !fee) { $('cFee').value = (cod * rate).toFixed(2); hint = carrier + ' คิด COD fee ' + (rate * 100) + '% ของยอด COD = ' + (cod * rate).toFixed(2) + (carrier === 'NNP' ? ' (เก็บสด ไม่อยู่ในใบเสร็จ)' : ''); }
     else if (cod && fee && Math.abs(cod * rate - fee) > 1) hint = '⚠️ ' + carrier + ' ปกติ COD fee = ' + (rate * 100) + '% ของยอด COD (' + (cod * rate).toFixed(2) + ') แต่ในใบ ' + fee.toFixed(2) + ' — เช็คอีกที';
   }
   $('cHint').textContent = hint;
