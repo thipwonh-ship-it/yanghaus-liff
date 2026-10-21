@@ -231,7 +231,7 @@ async function gotPhoto(inp) {
   $('aiBox').textContent = 'AI อ่านให้แล้ว (' + Math.round((d.confidence || 0) * 100) + '%) — เช็คยอดกับใบจริงก่อนกดบันทึก';
 }
 
-const COD_FEE_RATE = { 'Flash': 0.03, 'NNP': 0.03 };   // COD fee = % ของยอด COD (NNP เก็บสดนอกใบเสร็จ)
+const COD_FEE_RATE = { 'Flash': 0.025, 'NNP': 0.03 };   // COD fee = % ของยอด COD (NNP เก็บสดนอกใบเสร็จ)
 function codCalc(fromCod, fromFee) {
   const carrier = $('cCarrier').value, rate = COD_FEE_RATE[carrier] || 0;
   const cod = Number($('cCod').value) || 0, fee = Number($('cFee').value) || 0;
