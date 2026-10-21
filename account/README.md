@@ -65,7 +65,7 @@
 - **แก้หน้าฟอร์ม** → แก้ `account/index.html` → upload ทับใน GitHub → รอ 1–2 นาที
 - **แก้หลังบ้าน** → แก้ `Code.gs` ใน Apps Script → บันทึก → **Deploy → Manage deployments → ✏️ → Version: New version → Deploy** (ไม่ทำ = โค้ดเก่ายังทำงาน) URL เดิม
 - **เปลี่ยนชีท/โฟลเดอร์** → แก้ `SHEET_ID` / `FOLDER_ID` บนสุดของ Code.gs → Deploy ใหม่
-- **รุ่น AI** → รายการ `GEMINI_MODELS` บนสุดของ Code.gs ระบบลองตามลำดับ ถ้ารุ่นแรกถูกปลด (404) จะข้ามไปรุ่นถัดไปเอง และจำรุ่นที่ใช้ได้ไว้ใน Script property `GEMINI_MODEL_OK` (ลบ property นี้ถ้าอยากให้ลองใหม่)
+- **รุ่น AI** → `GEMINI_PREFER` บนสุดของ Code.gs คือลำดับที่อยากใช้ ระบบดึงรายชื่อรุ่นที่คีย์ใช้ได้จริงจาก Google (cache 6 ชม.) แล้วจับคู่ ถ้ารุ่นแรกล้น (503/429) ไปรุ่นถัดไปเอง รุ่นที่ใช้ได้ล่าสุดอยู่ใน Script property `GEMINI_MODEL_OK`
 - รายการ dropdown (ธุรกิจ/ประเภท/ซัพพลายเออร์) ดึงจากแท็บ `ตั้งค่า` ของชีท แก้ที่ชีทได้เลย
 
 ## บัญชีที่ใช้

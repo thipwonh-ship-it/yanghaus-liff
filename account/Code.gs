@@ -9,8 +9,8 @@
  */
 const SHEET_ID  = '17gY8l9pkJjIXqZWRfStYwga-xasJjef97HaHfI7KIB4';
 const FOLDER_ID = '1Pfy5Bo6vfkxWDyglsAJwDhg9rh5pajV-';   // โฟลเดอร์ ส่งบัญชี
-const GEMINI_MODELS = ['gemini-3.6-flash', 'gemini-3.6-flash-lite', 'gemini-3-flash', 'gemini-3-flash-lite', 'gemini-2.5-flash'];   // ลองตามลำดับ ถ้า 404/503/429 ข้ามไปตัวถัดไป
-const GEMINI_MODEL = GEMINI_MODELS[0];
+// รุ่นที่อยากใช้ตามลำดับ (prefix พอ) — ระบบดึงรายชื่อรุ่นที่มีจริงจาก Google แล้วจับคู่ ถ้ารุ่นแรกล้น (503/429) จะไปรุ่นถัดไป
+const GEMINI_PREFER = ['gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3', 'gemini-2.5-flash'];
 
 const TAB_EXP = 'ค่าใช้จ่าย';
 const TAB_BUY = 'ซื้อ';
@@ -159,11 +159,34 @@ function json_(o) {
   return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
 }
 
-/* เรียก Gemini: ลองรุ่นที่เคยใช้ได้ก่อน ถ้า 404 (ถูกปลด) / 503,429 (ล้น) → ลองซ้ำ 1 ครั้ง แล้วข้ามไปรุ่นถัดไป */
+/* รายชื่อรุ่นที่คีย์นี้ใช้ได้จริง (ถาม Google วันละครั้ง เก็บใน cache) เรียงตาม GEMINI_PREFER */
+function geminiModels_(key) {
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get('gemini_models');
+  if (hit) return JSON.parse(hit);
+  let names = [];
+  try {
+    const r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=' + key, { muteHttpExceptions: true });
+    if (r.getResponseCode() === 200) {
+      names = (JSON.parse(r.getContentText()).models || [])
+        .filter(m => (m.supportedGenerationMethods || []).indexOf('generateContent') >= 0)
+        .map(m => m.name.replace('models/', ''))
+        .filter(n => !/tts|audio|image|embedding|live|preview|exp|thinking/i.test(n));
+    }
+  } catch (e) {}
+  const ordered = [];
+  GEMINI_PREFER.forEach(p => names.forEach(n => { if (n.indexOf(p) === 0 && ordered.indexOf(n) < 0) ordered.push(n); }));
+  const list = ordered.length ? ordered.slice(0, 4) : GEMINI_PREFER;
+  cache.put('gemini_models', JSON.stringify(list), 21600);
+  return list;
+}
+
+/* เรียก Gemini: รุ่นที่เคยใช้ได้ก่อน → 404 ข้าม / 503,429 ลองซ้ำ 1 ครั้งแล้วไปรุ่นถัดไป */
 function geminiFetch_(key, body) {
   const props = PropertiesService.getScriptProperties();
+  const models = geminiModels_(key);
   const remembered = props.getProperty('GEMINI_MODEL_OK');
-  const order = remembered ? [remembered].concat(GEMINI_MODELS.filter(m => m !== remembered)) : GEMINI_MODELS;
+  const order = remembered && models.indexOf(remembered) >= 0 ? [remembered].concat(models.filter(m => m !== remembered)) : models;
   const opt = { method: 'post', contentType: 'application/json', payload: JSON.stringify(body), muteHttpExceptions: true };
   let res = null, best = null;
   for (const m of order) {
@@ -171,10 +194,10 @@ function geminiFetch_(key, body) {
     for (let attempt = 0; attempt < 2; attempt++) {
       res = UrlFetchApp.fetch(url, opt);
       const c = res.getResponseCode();
-      if (c === 404) break;                                   // รุ่นนี้ไม่มี → รุ่นถัดไป
-      if (c === 503 || c === 429) { best = res; Utilities.sleep(1500); continue; }   // ล้น → รอแล้วลองอีกที
+      if (c === 404) break;
+      if (c === 503 || c === 429) { best = res; Utilities.sleep(1000); continue; }
       if (c === 200 && m !== remembered) props.setProperty('GEMINI_MODEL_OK', m);
-      return res;                                             // 200 หรือ error อื่น (400/403) → รายงานเลย
+      return res;
     }
   }
   return best || res;
@@ -189,8 +212,7 @@ function testGemini() {
   if (!key) { Logger.log('ไม่พบ GEMINI_API_KEY ใน Script properties'); return; }
   Logger.log('key ขึ้นต้น ' + key.slice(0, 6) + '… ยาว ' + key.length);
   const res = geminiFetch_(key, { contents: [{ parts: [{ text: 'ตอบคำว่า OK' }] }] });
-  Logger.log('รุ่นที่ใช้: ' + PropertiesService.getScriptProperties().getProperty('GEMINI_MODEL_OK'));
+  Logger.log('รุ่นที่ใช้ได้: ' + JSON.stringify(geminiModels_(key)));
+  Logger.log('รุ่นที่ใช้ล่าสุด: ' + PropertiesService.getScriptProperties().getProperty('GEMINI_MODEL_OK'));
   Logger.log('HTTP ' + res.getResponseCode() + ' → ' + res.getContentText().slice(0, 400));
-  const list = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models?key=' + key, { muteHttpExceptions: true });
-  Logger.log('models: ' + list.getContentText().replace(/\s+/g, ' ').slice(0, 400));
 }
