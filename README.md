@@ -63,6 +63,7 @@ A วันที่ | B เวลา | C ผู้ส่ง | D ขนส่ง
 - index.html บรรทัดบนของ `<script>`: `LIFF_ID`, `GAS_URL`
 - Code.gs บรรทัดบนสุด: `SHEET_ID`, `FOLDER_ID`
 - ขนส่งใน dropdown: SPX / J&T / Flash / BEST / อื่นๆ (แก้ที่ `<select id="carrier">`)
+- สาขาประจำต่อขนส่ง: แก้ที่ `const BRANCHES` ใน index.html (SPX=วัดกระทุ่ม, J&T=74/2, Flash=หลังโรงไม้, BEST=รามสอง) เพิ่มได้หลายสาขาต่อขนส่ง
 - บาร์โค้ดที่อ่าน: CODE_128, CODE_39, QR (ไลบรารี html5-qrcode จาก cdnjs)
 
 ## ข้อจำกัดที่ควรรู้

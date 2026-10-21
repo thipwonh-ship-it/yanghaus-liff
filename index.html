@@ -40,7 +40,8 @@
 <input id="carrierOther" placeholder="ชื่อขนส่ง" style="display:none;margin-top:8px">
 
 <label>สาขา</label>
-<input id="branch" placeholder="เช่น SPX บางนา">
+<select id="branchSel"></select>
+<input id="branch" placeholder="ชื่อสาขา" style="display:none;margin-top:8px">
 
 <label>ถ่ายรูปสินค้าแต่ละชิ้น ถ่ายใกล้ๆ ให้ใบปะหน้าเต็มจอ <span style="color:#d32f2f">*บังคับ</span></label>
 <input type="file" id="photo1" accept="image/*" capture="environment" style="display:none">
@@ -197,9 +198,27 @@ document.querySelectorAll('input[name=scanned]').forEach(r=>r.addEventListener('
   document.getElementById('blockYes').style.display = e.target.value==='yes'?'block':'none';
   document.getElementById('blockNo').style.display  = e.target.value==='no' ?'block':'none';
 }));
+// สาขาประจำของแต่ละขนส่ง (แก้ตรงนี้ถ้าเปลี่ยน)
+const BRANCHES = { 'SPX':['วัดกระทุ่ม'], 'J&T':['74/2'], 'Flash':['หลังโรงไม้'], 'BEST':['รามสอง'] };
+function fillBranches(){
+  const c=document.getElementById('carrier').value, sel=document.getElementById('branchSel'), inp=document.getElementById('branch');
+  sel.innerHTML='';
+  (BRANCHES[c]||[]).forEach(b=>{ const o=document.createElement('option'); o.value=b; o.textContent=b; sel.appendChild(o); });
+  const o=document.createElement('option'); o.value='__other'; o.textContent='อื่นๆ (ระบุ)'; sel.appendChild(o);
+  if(!(BRANCHES[c]||[]).length){ sel.value='__other'; }
+  syncBranch();
+}
+function syncBranch(){
+  const sel=document.getElementById('branchSel'), inp=document.getElementById('branch');
+  if(sel.value==='__other'){ inp.style.display='block'; inp.value=''; inp.focus(); }
+  else { inp.style.display='none'; inp.value=sel.value; }
+}
+document.getElementById('branchSel').addEventListener('change', syncBranch);
 document.getElementById('carrier').addEventListener('change', e=>{
   document.getElementById('carrierOther').style.display = e.target.value==='อื่นๆ' ? 'block' : 'none';
+  fillBranches();
 });
+fillBranches();
 
 // ===== สแกนบาร์โค้ด =====
 let scanner = null, scanning = false, lastCode = '', lastTime = 0;
@@ -265,6 +284,7 @@ document.getElementById('send').onclick = async ()=>{
   const nTrack=tracking.split(/\n/).map(s=>s.trim()).filter(Boolean).length;
   let carrier=document.getElementById('carrier').value;
   if(carrier==='อื่นๆ'){ carrier=document.getElementById('carrierOther').value.trim(); if(!carrier){ msg.textContent='⚠️ ระบุชื่อขนส่ง'; return; } }
+  if(!document.getElementById('branch').value.trim()){ msg.textContent='⚠️ ระบุสาขา'; return; }
   if(!tracking){ msg.textContent='⚠️ ต้องใส่เลขพัสดุ (สแกนหรือพิมพ์)'; return; }
   if(!f1.length){ msg.textContent='⚠️ ต้องถ่ายรูปของวางที่สาขา (เห็นใบปะหน้า)'; return; }
   if(f1.length!==nTrack && !confirm(`เลขพัสดุ ${nTrack} ชิ้น แต่รูปสินค้า ${f1.length} รูป\nควรถ่าย 1 ชิ้น 1 รูป — ส่งต่อเลยไหม?`)) return;
