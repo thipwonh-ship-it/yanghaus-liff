@@ -30,7 +30,7 @@
 <h2>📦 ส่งของที่สาขา</h2>
 <div class="small" id="who">กำลังเชื่อม LINE…</div>
 <div class="small" style="background:#fff;border-radius:8px;padding:10px;margin-top:10px;line-height:1.6">
-<b>ขั้นตอน:</b> ① ถ่ายรูปสินค้าทีละชิ้น ให้เห็นใบปะหน้า (ระบบอ่านเลขให้เอง) → ② ตอบว่าขนส่งยิงรับหรือยัง → ③ ถ่ายรูปสุดท้าย 1 รูป → ④ บันทึก
+<b>ขั้นตอน:</b> ① ถ่ายรูปสินค้าทีละชิ้น <b>เข้าใกล้ให้ใบปะหน้าเต็มจอ</b> (ระบบอ่านเลขให้เอง) → ② ตอบว่าขนส่งยิงรับหรือยัง → ③ ถ่ายรูปสุดท้าย 1 รูป → ④ บันทึก
 </div>
 
 <label>ขนส่ง</label>
@@ -42,7 +42,7 @@
 <label>สาขา</label>
 <input id="branch" placeholder="เช่น SPX บางนา">
 
-<label>ถ่ายรูปสินค้าแต่ละชิ้นให้เห็นใบปะหน้าชัดเจน <span style="color:#d32f2f">*บังคับ</span></label>
+<label>ถ่ายรูปสินค้าแต่ละชิ้น ถ่ายใกล้ๆ ให้ใบปะหน้าเต็มจอ <span style="color:#d32f2f">*บังคับ</span></label>
 <input type="file" id="photo1" accept="image/*" capture="environment" style="display:none">
 <button type="button" class="scanbtn" onclick="document.getElementById('photo1').click()">📸 ถ่ายรูปสินค้า (กดซ้ำทุกชิ้น)</button>
 <div class="photos" id="prev1"></div>
@@ -135,20 +135,42 @@ function preview(inputId, boxId, arr, cntId){
 
 // ตรวจรูปสินค้า: ต้องอ่านบาร์โค้ดใบปะหน้าจากรูปได้
 let fileScanner=null;
+function loadImg(file){ return new Promise(r=>{ const i=new Image(); i.onload=()=>r(i); i.src=URL.createObjectURL(file); }); }
+function cropBlob(img,x,y,w,h,scale){
+  return new Promise(r=>{ const c=document.createElement('canvas'); c.width=w*scale; c.height=h*scale;
+    c.getContext('2d').drawImage(img,x,y,w,h,0,0,c.width,c.height); c.toBlob(b=>r(new File([b],'c.jpg',{type:'image/jpeg'})),'image/jpeg',0.92); });
+}
+// JTTH…, TH…, SPXTH…, 7xxxxxx  → เลขพัสดุ; ตัวอื่น (QR ที่มีลิงก์) ตัดทิ้ง
+function looksLikeTracking(t){ return /^[A-Z0-9]{10,25}$/.test(t) && !/^https?:/i.test(t); }
+async function tryDecode(file){
+  fileScanner = fileScanner || new Html5Qrcode('filescan');
+  try{ const r=await fileScanner.scanFileV2(file,false); const t=(r.decodedText||'').trim(); if(looksLikeTracking(t)) return t; }catch(_){}
+  return null;
+}
 async function checkLabelPhoto(file){
   const msg=document.getElementById('msg');
   msg.textContent='🔍 กำลังตรวจใบปะหน้าในรูป…';
-  fileScanner = fileScanner || new Html5Qrcode('filescan');
-  let code=null;
-  try{ const r=await fileScanner.scanFileV2(file,false); code=(r.decodedText||'').trim(); }catch(_){}
+  let code = await tryDecode(file);                 // 1) รูปเต็มความละเอียดเดิม
+  if(!code){                                        // 2) ซูมเข้าหลายโซน (ใบปะหน้ามักเล็กเมื่อเทียบกับยาง)
+    const img = await loadImg(file); const W=img.naturalWidth, H=img.naturalHeight;
+    const zones=[[0.25,0.25,0.5,0.5],[0.15,0.15,0.7,0.7],[0,0,0.6,0.6],[0.4,0,0.6,0.6],[0,0.4,0.6,0.6],[0.4,0.4,0.6,0.6],[0.2,0.3,0.6,0.4]];
+    for(const [fx,fy,fw,fh] of zones){
+      for(const sc of [2,3]){
+        const crop = await cropBlob(img, W*fx, H*fy, W*fw, H*fh, sc);
+        code = await tryDecode(crop); if(code) break;
+      }
+      if(code) break;
+    }
+  }
   if(!code){
-    msg.textContent='❌ ไม่เห็นบาร์โค้ดใบปะหน้าในรูป กรุณาถ่ายใหม่ให้ชัด (ถ้าแน่ใจว่าเห็นชัด กดยืนยันได้)';
     if(navigator.vibrate) navigator.vibrate([60,60,60]);
-    return confirm('อ่านบาร์โค้ดจากรูปไม่ได้\nถ่ายใหม่ให้เห็นใบปะหน้าชัดเจน\n\nยืนยันใช้รูปนี้อยู่ดี?') ? true : false;
+    msg.textContent='❌ อ่านบาร์โค้ดจากรูปไม่ได้ — ถ่ายใหม่ให้ใบปะหน้าเต็มจอ หรือสแกนด้วยกล้อง';
+    const choice = confirm('อ่านบาร์โค้ดจากรูปไม่ได้\n\nถ่ายใกล้ๆ ให้ใบปะหน้าเต็มจอ แล้วถ่ายใหม่\n\nกด OK = เปิดกล้องสแกนบาร์โค้ดแทน (แล้วค่อยถ่ายรูปซ้ำ)\nกด Cancel = ถ่ายรูปใหม่');
+    if(choice){ document.getElementById('scanBtn').click(); document.getElementById('scanBtn').scrollIntoView({behavior:'smooth'}); }
+    return false;
   }
   const list = ta.value.split(/\n/).map(s=>s.trim()).filter(Boolean);
   if(!list.includes(code)){
-    // ยังไม่ได้สแกนเลขนี้ → เพิ่มให้เลยจากรูป
     addCode(code);
     msg.textContent='✅ อ่านใบปะหน้าได้ '+code+' (เพิ่มเลขให้แล้ว)';
   } else {
@@ -213,9 +235,11 @@ document.getElementById('scanBtn').onclick = async ()=>{
   box.classList.add('on'); btn.textContent='⏹ หยุดสแกน'; scanning=true;
   try{
     await scanner.start({facingMode:'environment'},
-      {fps:10, qrbox:{width:280,height:120}, formatsToSupport:[Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39, Html5QrcodeSupportedFormats.QR_CODE]},
+      {fps:15, qrbox:{width:300,height:160}, formatsToSupport:[Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39, Html5QrcodeSupportedFormats.QR_CODE]},
       (text)=>{
         const now=Date.now();
+        text=(text||'').trim();
+        if(!looksLikeTracking(text)) return;
         if(text===lastCode && now-lastTime<2000) return;
         lastCode=text; lastTime=now; addCode(text);
       }, ()=>{});
