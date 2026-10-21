@@ -51,7 +51,7 @@
     <h2>1. รายการนี้คืออะไร</h2>
     <div class="seg">
       <button id="tExp" class="on" onclick="setType('exp')">💸 ค่าใช้จ่าย</button>
-      <button id="tBuy" onclick="setType('buy')">🛞 ซื้อยาง/ล้อ</button>
+      <button id="tBuy" onclick="setType('buy')">🛞 ซื้อของมาขาย</button>
       <button id="tCod" onclick="setType('cod')">📦 ส่ง COD</button>
     </div>
     <div class="hint" id="tHint">ค่าแท็กซี่ Lalamove อุปกรณ์ ค่าโฆษณา บิลโทรศัพท์ ฯลฯ</div>
@@ -204,9 +204,9 @@ function today() { const d = new Date(); return d.getFullYear() + '-' + String(d
 function setType(t) {
   type = t;
   $('tExp').classList.toggle('on', t === 'exp'); $('tBuy').classList.toggle('on', t === 'buy'); $('tCod').classList.toggle('on', t === 'cod');
-  $('tHint').textContent = t === 'buy' ? 'สินค้าที่ซื้อจากซัพพลายเออร์เพื่อขายต่อ (มีหรือไม่มีใบกำกับก็ได้)'
+  $('tHint').textContent = t === 'buy' ? 'ยาง/ล้อที่ซื้อมาขายต่อเท่านั้น (ของใช้เองไปที่ค่าใช้จ่าย)'
     : t === 'cod' ? 'ใบเสร็จ/ใบปะหน้า Flash NNP J&T ที่ส่งแบบเก็บเงินปลายทาง → ลงทะเบียน COD + ขาย + ค่าส่ง ในครั้งเดียว'
-    : 'ค่าแท็กซี่ Lalamove อุปกรณ์ ค่าโฆษณา บิลโทรศัพท์ ฯลฯ';
+    : 'ของใช้เอง: เครื่องปริ้น (เลือกประเภท สินทรัพย์) หมึก อุปกรณ์ ค่าแท็กซี่ Lalamove ค่าโฆษณา บิลโทรศัพท์ ฯลฯ';
   $('gCod').classList.toggle('hide', t !== 'cod'); $('gGen').classList.toggle('hide', t === 'cod');
   $('gExp').classList.toggle('hide', t === 'buy'); $('gBuy').classList.toggle('hide', t !== 'buy'); $('gQty').classList.toggle('hide', t !== 'buy');
   $('lVendor').textContent = t === 'buy' ? 'ซัพพลายเออร์' : 'ผู้ขาย / ร้าน';
