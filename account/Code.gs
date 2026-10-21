@@ -9,7 +9,7 @@
  */
 const SHEET_ID  = '17gY8l9pkJjIXqZWRfStYwga-xasJjef97HaHfI7KIB4';
 const FOLDER_ID = '1Pfy5Bo6vfkxWDyglsAJwDhg9rh5pajV-';   // โฟลเดอร์ ส่งบัญชี
-const GEMINI_MODELS = ['gemini-3.6-flash', 'gemini-3-flash', 'gemini-2.5-flash'];   // ลองตามลำดับ ถ้า 404 ข้ามไปตัวถัดไป
+const GEMINI_MODELS = ['gemini-3.6-flash', 'gemini-3.6-flash-lite', 'gemini-3-flash', 'gemini-3-flash-lite', 'gemini-2.5-flash'];   // ลองตามลำดับ ถ้า 404/503/429 ข้ามไปตัวถัดไป
 const GEMINI_MODEL = GEMINI_MODELS[0];
 
 const TAB_EXP = 'ค่าใช้จ่าย';
@@ -159,18 +159,25 @@ function json_(o) {
   return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
 }
 
-/* เรียก Gemini โดยลองทุกรุ่นใน GEMINI_MODELS จนกว่าจะไม่ 404 (จำรุ่นที่ใช้ได้ไว้) */
+/* เรียก Gemini: ลองรุ่นที่เคยใช้ได้ก่อน ถ้า 404 (ถูกปลด) / 503,429 (ล้น) → ลองซ้ำ 1 ครั้ง แล้วข้ามไปรุ่นถัดไป */
 function geminiFetch_(key, body) {
   const props = PropertiesService.getScriptProperties();
   const remembered = props.getProperty('GEMINI_MODEL_OK');
   const order = remembered ? [remembered].concat(GEMINI_MODELS.filter(m => m !== remembered)) : GEMINI_MODELS;
-  let res = null;
+  const opt = { method: 'post', contentType: 'application/json', payload: JSON.stringify(body), muteHttpExceptions: true };
+  let res = null, best = null;
   for (const m of order) {
-    res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent?key=' + key,
-      { method: 'post', contentType: 'application/json', payload: JSON.stringify(body), muteHttpExceptions: true });
-    if (res.getResponseCode() !== 404) { if (m !== remembered) props.setProperty('GEMINI_MODEL_OK', m); return res; }
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent?key=' + key;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      res = UrlFetchApp.fetch(url, opt);
+      const c = res.getResponseCode();
+      if (c === 404) break;                                   // รุ่นนี้ไม่มี → รุ่นถัดไป
+      if (c === 503 || c === 429) { best = res; Utilities.sleep(1500); continue; }   // ล้น → รอแล้วลองอีกที
+      if (c === 200 && m !== remembered) props.setProperty('GEMINI_MODEL_OK', m);
+      return res;                                             // 200 หรือ error อื่น (400/403) → รายงานเลย
+    }
   }
-  return res;
+  return best || res;
 }
 
 /* ทดสอบใน editor: เลือก testConfig แล้วกด Run (ครั้งแรกจะขอสิทธิ์) */
