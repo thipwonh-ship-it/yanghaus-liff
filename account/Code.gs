@@ -63,12 +63,20 @@ function readReceipt_(b64, mime, type) {
 
   const cfg = getConfig_();
   const cats = cfg.categories;
-  const prompt = type === 'cod' ?
+  const prompt = type === 'sale' ?
+    'You are reading, for bookkeeping, evidence of a sale by our shop YANG Haus (ยางเฮ้าส์ / lorcenter): a bank transfer slip received from a customer, a chat screenshot (Facebook/LINE) with an order, or a handwritten/typed bill. Return ONLY JSON with keys:\n' +
+    'date (YYYY-MM-DD; Thai year พ.ศ. minus 543; empty if unreadable), ' +
+    'customer (buyer/payer name), phone (buyer phone digits only, empty if none), province (buyer province in Thai, empty if none), ' +
+    'items (what was sold, short Thai, e.g. ล้อแม็ก KAYS 17 นิ้ว x4), qty (number of pieces if clear, else 0), ' +
+    'amount (sale amount paid/agreed, number), ' +
+    'ref (transfer reference / slip number / order no if any), ' +
+    'channel (best guess from: Facebook | LINE | ขายส่ง | อื่นๆ), confidence (0-1).'
+    : type === 'cod' ?
     'You are reading a Thai parcel/COD shipping receipt or waybill (Flash Express, NNP, J&T, Kerry...) for bookkeeping. Return ONLY JSON with keys:\n' +
     'date (YYYY-MM-DD; Thai year พ.ศ. minus 543; empty if unreadable), ' +
     'carrier (best match from: ' + cfg.carriers.join(' | ') + '), ' +
     'tracking (parcel/tracking/waybill number, e.g. TH2301996BHA0G or OT6924638), ' +
-    'customer (consignee/receiver name), ' +
+    'customer (consignee/receiver name), phone (receiver phone, digits only, empty if none), province (receiver province in Thai, e.g. พัทลุง, กรุงเทพมหานคร; empty if none), ' +
     'items (goods description, short Thai), ' +
     'cod_amount (amount to collect from receiver; on NNP waybill it is the number in *** after the item e.g. ***3,090; 0 if not COD), ' +
     'freight (shipping fee number), cod_fee (COD service fee number, 0 if none), vat (VAT amount shown, 0 if none), ' +
@@ -119,6 +127,7 @@ function readReceipt_(b64, mime, type) {
 function saveRecord_(r) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   if (r.type === 'cod') return saveCod_(ss, r);
+  if (r.type === 'sale') return saveSale_(ss, r);
   const isBuy = r.type === 'buy';
   const sh = ss.getSheetByName(isBuy ? TAB_BUY : TAB_EXP);
   const d = r.date ? new Date(r.date + 'T00:00:00+07:00') : new Date();
@@ -253,7 +262,8 @@ function saveCod_(ss, r) {
   const rowC = nextRow_(shCod);
   shCod.getRange(rowC, 1, 1, 9).setValues([[d, r.carrier || '', tracking, r.customer || '', r.items || '', cod, freight, codFee, vat]]);
   shCod.getRange(rowC, 11, 1, 4).setValues([[r.orderRef || '', false, '', '']]);
-  shCod.getRange(rowC, 16, 1, 3).setValues([[photoUrl, [paidNow ? 'จ่ายค่าส่งต้นทาง' : 'ขนส่งหักค่าส่งจากยอด COD', r.note].filter(Boolean).join(' | '), r.by || '']]);
+  shCod.getRange(rowC, 16, 1, 5).setValues([[photoUrl, [paidNow ? 'จ่ายค่าส่งต้นทาง' : 'ขนส่งหักค่าส่งจากยอด COD', r.note].filter(Boolean).join(' | '), r.by || '', String(r.phone || '').replace(/\D/g, ''), r.province || '']]);
+  if (r.phone) shCod.getRange(rowC, 19).setNumberFormat('@');
   shCod.getRange(rowC, 1).setNumberFormat('yyyy-mm-dd');
   shCod.getRange(rowC, 3).setNumberFormat('@');
 
@@ -267,9 +277,9 @@ function saveCod_(ss, r) {
     shS.getRange(rowS, 13).setFormula('=IF(' + m + '>0,IF(INDEX(COD!$L:$L,' + m + ')=TRUE,INDEX(COD!$N:$N,' + m + '),""),"")');
     shS.getRange(rowS, 15).setValue(0);
     shS.getRange(rowS, 19).setFormula('=IF(' + m + '>0,INDEX(COD!$L:$L,' + m + ')=TRUE,FALSE)');
-    shS.getRange(rowS, 20).setValue(['COD ' + (r.carrier || '') + ' ' + tracking, by].filter(Boolean).join(' | '));
+    shS.getRange(rowS, 20, 1, 3).setValues([[['COD ' + (r.carrier || '') + ' ' + tracking, by].filter(Boolean).join(' | '), String(r.phone || '').replace(/\D/g, ''), r.province || '']]);
     shS.getRange(rowS, 1).setNumberFormat('yyyy-mm-dd');
-    shS.getRange(rowS, 4).setNumberFormat('@');
+    shS.getRange(rowS, 4).setNumberFormat('@'); shS.getRange(rowS, 21).setNumberFormat('@');
   }
 
   // 3) แถวค่าส่งในค่าใช้จ่าย (เฉพาะจ่ายเงินสดต้นทาง) ผูกเลขพัสดุ → ไปโผล่ในกำไรต่อออเดอร์
@@ -283,6 +293,52 @@ function saveCod_(ss, r) {
     shE.getRange(rowE, 1).setNumberFormat('yyyy-mm-dd');
   }
   return { ok: true, tab: TAB_COD, row: rowC, saleRow: rowS, expRow: rowE, paid: paid, photoUrl: photoUrl };
+}
+
+/* ขาย (โอน/ขายส่ง/Facebook ที่ไม่ใช่ COD): 1 ใบ → แถวขาย (+ รูปสลิป/แชทใน Drive/ภาษีขาย) */
+function saveSale_(ss, r) {
+  const d = r.date ? new Date(r.date + 'T00:00:00+07:00') : new Date();
+  const amount = Number(r.amount) || 0;
+  if (!amount) return { ok: false, error: 'ต้องมียอดขาย' };
+  const shS = ss.getSheetByName(TAB_SALE);
+  const ymd = Utilities.formatDate(d, 'Asia/Bangkok', 'yyyy-MM-dd');
+  // เลขอ้างอิงขาย: ใช้ ref ที่ให้มา ไม่งั้นสร้าง FB-YYYYMMDD-NNN
+  let ref = String(r.ref || '').trim();
+  const lastS = shS.getLastRow();
+  const refs = lastS >= 2 ? shS.getRange(2, 4, lastS - 1, 1).getValues().map(x => String(x[0]).trim()) : [];
+  if (!ref) {
+    const base = (r.channel === 'ขายส่ง' ? 'WS-' : r.channel === 'LINE' ? 'LN-' : 'FB-') + ymd.replace(/-/g, '');
+    let n = 1; while (refs.indexOf(base + '-' + String(n).padStart(3, '0')) >= 0) n++;
+    ref = base + '-' + String(n).padStart(3, '0');
+  } else if (refs.indexOf(ref) >= 0) {
+    return { ok: false, dup: true, where: TAB_SALE + ' แถว ' + (refs.indexOf(ref) + 2) + ' (เลขอ้างอิง ' + ref + ')' };
+  }
+  // กันซ้ำ: วันที่ + ลูกค้า + ยอด
+  if (lastS >= 2) {
+    const v = shS.getRange(2, 1, lastS - 1, 8).getValues();
+    for (let i = 0; i < v.length; i++) {
+      const rd = v[i][0] instanceof Date ? Utilities.formatDate(v[i][0], 'Asia/Bangkok', 'yyyy-MM-dd') : String(v[i][0]);
+      if (rd === ymd && String(v[i][4]).trim() === String(r.customer || '').trim() && Math.abs(Number(v[i][7]) - amount) < 0.005)
+        return { ok: false, dup: true, where: TAB_SALE + ' แถว ' + (i + 2) + ' (วันที่/ลูกค้า/ยอด เท่ากัน)' };
+    }
+  }
+  let photoUrl = '';
+  if (r.image) {
+    const ym = Utilities.formatDate(d, 'Asia/Bangkok', 'yyyy-MM');
+    const folder = getOrCreate_(getOrCreate_(DriveApp.getFolderById(FOLDER_ID), ym), 'ภาษีขาย');
+    const safe = x => String(x || '').replace(/[\\/:*?"<>|]/g, '').trim().slice(0, 40);
+    photoUrl = folder.createFile(Utilities.newBlob(Utilities.base64Decode(r.image), r.mime || 'image/jpeg', ymd + '_ขาย_' + (safe(r.customer) || 'ลูกค้า') + '_' + amount.toFixed(2) + '_' + safe(ref) + '.jpg')).getUrl();
+  }
+  const by = r.by ? 'จดผ่านไลน์: ' + r.by : '';
+  const row = nextRow_(shS);
+  const paid = !!r.paid;
+  // A วันที่ B ธุรกิจ C ช่องทาง D เลขออเดอร์ E ลูกค้า F สินค้า G จำนวน H ยอด I ออกใบกำกับ | J,K สูตร | L เลขใบกำกับ M เงินเข้าจริง | N สูตร | O ขนส่งออก | P,Q,R สูตร | S รับเงินแล้ว T หมายเหตุ U เบอร์ V จังหวัด
+  shS.getRange(row, 1, 1, 9).setValues([[d, r.business || 'YANG Haus', r.channel || 'Facebook', ref, r.customer || '', r.items || '', Number(r.qty) || '', amount, r.invoice || 'ไม่ออก']]);
+  shS.getRange(row, 12, 1, 2).setValues([[r.invoiceNo || '', paid ? amount : '']]);
+  shS.getRange(row, 15).setValue(Number(r.shipOut) || 0);
+  shS.getRange(row, 19, 1, 4).setValues([[paid, [r.note, photoUrl ? 'รูป: ' + photoUrl : '', by].filter(Boolean).join(' | '), String(r.phone || '').replace(/\D/g, ''), r.province || '']]);
+  shS.getRange(row, 1).setNumberFormat('yyyy-mm-dd'); shS.getRange(row, 4).setNumberFormat('@'); shS.getRange(row, 21).setNumberFormat('@');
+  return { ok: true, tab: TAB_SALE, row: row, ref: ref, photoUrl: photoUrl };
 }
 
 function findDuplicate_(ss, invNo, d, vendor, total) {

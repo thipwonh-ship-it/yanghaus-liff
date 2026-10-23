@@ -52,7 +52,10 @@
     <div class="seg">
       <button id="tExp" class="on" onclick="setType('exp')">💸 ค่าใช้จ่าย</button>
       <button id="tBuy" onclick="setType('buy')">🛞 ซื้อของมาขาย</button>
+    </div>
+    <div class="seg" style="margin-top:8px">
       <button id="tCod" onclick="setType('cod')">📦 ส่ง COD</button>
+      <button id="tSale" onclick="setType('sale')">🧾 ขาย (โอน/ขายส่ง)</button>
     </div>
     <div class="hint" id="tHint">ค่าแท็กซี่ Lalamove อุปกรณ์ ค่าโฆษณา บิลโทรศัพท์ ฯลฯ</div>
   </div>
@@ -85,7 +88,11 @@
       <label>เลขพัสดุ</label><input id="cTrack" type="text" placeholder="TH2301… / OT6924638">
       <div class="row">
         <div><label>ลูกค้า (ผู้รับ)</label><input id="cCust" type="text"></div>
-        <div><label>ช่องทางขาย</label><select id="cChannel"><option>Facebook</option><option>ขายส่ง</option><option>อื่นๆ</option></select></div>
+        <div><label>ช่องทางขาย</label><select id="cChannel"><option>Facebook</option><option>LINE</option><option>ขายส่ง</option><option>อื่นๆ</option></select></div>
+      </div>
+      <div class="row">
+        <div><label>เบอร์โทรลูกค้า</label><input id="cPhone" type="tel" inputmode="tel"></div>
+        <div><label>จังหวัด</label><input id="cProv" type="text"></div>
       </div>
       <label>สินค้า</label><input id="cItems" type="text">
       <div class="row">
@@ -107,6 +114,32 @@
       </div>
       <label>อ้างอิงบิล/ออเดอร์ของเรา (ถ้ามี)</label><input id="cRef" type="text">
       <label>หมายเหตุ</label><input id="cNote" type="text">
+    </div>
+    <div id="gSale" class="hide">
+      <div class="row">
+        <div><label>วันที่ขาย</label><input id="sDate" type="date"></div>
+        <div><label>ช่องทาง</label><select id="sChannel"><option>Facebook</option><option>LINE</option><option>ขายส่ง</option><option>อื่นๆ</option></select></div>
+      </div>
+      <label>ลูกค้า</label><input id="sCust" type="text">
+      <div class="row">
+        <div><label>เบอร์โทร</label><input id="sPhone" type="tel" inputmode="tel"></div>
+        <div><label>จังหวัด</label><input id="sProv" type="text"></div>
+      </div>
+      <label>สินค้า (รุ่น/ขนาด)</label><input id="sItems" type="text">
+      <div class="row">
+        <div><label>ยอดขาย (บาท)</label><input id="sAmount" type="number" step="0.01" inputmode="decimal"></div>
+        <div><label>จำนวน (เส้น/วง)</label><input id="sQty" type="number" inputmode="numeric"></div>
+      </div>
+      <div class="row">
+        <div><label>ออกใบกำกับภาษี</label><select id="sInv"><option>ไม่ออก</option><option>เราออก</option></select></div>
+        <div><label>เลขที่ใบกำกับ (ถ้าออก)</label><input id="sInvNo" type="text"></div>
+      </div>
+      <div class="chk"><input id="sPaid" type="checkbox" checked><span>รับเงินแล้ว (โอนเข้าบัญชีแล้ว)</span></div>
+      <div class="row">
+        <div><label>ค่าส่งที่เราจ่าย (ถ้ามี)</label><input id="sShip" type="number" step="0.01" inputmode="decimal"></div>
+        <div><label>เลขอ้างอิง/เลขสลิป (ว่าง = ระบบตั้งให้)</label><input id="sRef" type="text"></div>
+      </div>
+      <label>หมายเหตุ</label><input id="sNote" type="text">
     </div>
     <div id="gGen">
     <div class="row">
@@ -193,7 +226,10 @@ async function init() {
   try { cfg = JSON.parse(localStorage.getItem('yh_cfg') || 'null'); } catch (e) {}
   if (cfg) fillConfig();
   post({ action: 'config' }).then(c => { if (c.ok) { cfg = c; hasAI = c.hasAI; localStorage.setItem('yh_cfg', JSON.stringify(c)); fillConfig(); } });
-  $('fDate').value = today(); $('cDate').value = today();
+  $('fDate').value = today(); $('cDate').value = today(); $('sDate').value = today();
+  const mode = new URLSearchParams(location.search).get('mode') || (liff.state && new URLSearchParams(liff.state).get('mode'));
+  if (['exp', 'buy', 'cod', 'sale'].includes(mode)) setType(mode);
+  if (mode === 'paid') openPaid();
 }
 function fillConfig() {
   fill($('fBiz'), cfg.business, 'YANG Haus');
@@ -207,11 +243,12 @@ function today() { const d = new Date(); return d.getFullYear() + '-' + String(d
 
 function setType(t) {
   type = t;
-  $('tExp').classList.toggle('on', t === 'exp'); $('tBuy').classList.toggle('on', t === 'buy'); $('tCod').classList.toggle('on', t === 'cod');
+  $('tExp').classList.toggle('on', t === 'exp'); $('tBuy').classList.toggle('on', t === 'buy'); $('tCod').classList.toggle('on', t === 'cod'); $('tSale').classList.toggle('on', t === 'sale');
   $('tHint').textContent = t === 'buy' ? 'ยาง/ล้อที่ซื้อมาขายต่อเท่านั้น (ของใช้เองไปที่ค่าใช้จ่าย)'
     : t === 'cod' ? 'ใบเสร็จ/ใบปะหน้า Flash NNP J&T ที่ส่งแบบเก็บเงินปลายทาง → ลงทะเบียน COD + ขาย + ค่าส่ง ในครั้งเดียว'
+    : t === 'sale' ? 'ขายที่ลูกค้าโอนเงิน (Facebook/LINE/ขายส่ง) → ถ่ายสลิปที่ลูกค้าโอน หรือแคปแชทออเดอร์ → ลงแท็บขาย + รายชื่อลูกค้า'
     : 'ของใช้เอง: เครื่องปริ้น (เลือกประเภท สินทรัพย์) หมึก อุปกรณ์ ค่าแท็กซี่ Lalamove ค่าโฆษณา บิลโทรศัพท์ ฯลฯ';
-  $('gCod').classList.toggle('hide', t !== 'cod'); $('gGen').classList.toggle('hide', t === 'cod');
+  $('gCod').classList.toggle('hide', t !== 'cod'); $('gSale').classList.toggle('hide', t !== 'sale'); $('gGen').classList.toggle('hide', t === 'cod' || t === 'sale');
   $('gExp').classList.toggle('hide', t === 'buy'); $('gBuy').classList.toggle('hide', t !== 'buy'); $('gQty').classList.toggle('hide', t !== 'buy');
   $('lVendor').textContent = t === 'buy' ? 'ซัพพลายเออร์' : 'ผู้ขาย / ร้าน';
   $('lItems').textContent = t === 'buy' ? 'สินค้า (รุ่น/ขนาด)' : 'รายละเอียด';
@@ -229,12 +266,28 @@ async function gotPhoto(inp) {
   const r = await post({ action: 'read', image: imgB64, mime: imgMime, type });
   if (!r.ok || r.noai || !r.data) { $('aiBox').innerHTML = 'อ่านอัตโนมัติไม่ได้ กรอกเองได้เลย' + (r.error ? ' (' + r.error + ')' : ''); return; }
   const d = r.data;
+  if (type === 'sale') {
+    if (d.date) $('sDate').value = d.date;
+    if (d.customer) $('sCust').value = d.customer;
+    if (d.phone) $('sPhone').value = String(d.phone).replace(/\D/g, '');
+    if (d.province) $('sProv').value = d.province;
+    if (d.items) $('sItems').value = d.items;
+    if (d.qty) $('sQty').value = d.qty;
+    if (d.amount) $('sAmount').value = Number(d.amount).toFixed(2);
+    if (d.ref) $('sRef').value = d.ref;
+    if (d.channel && ['Facebook', 'LINE', 'ขายส่ง', 'อื่นๆ'].includes(d.channel)) $('sChannel').value = d.channel;
+    $('aiBox').className = 'ai good';
+    $('aiBox').textContent = 'AI อ่านให้แล้ว (' + Math.round((d.confidence || 0) * 100) + '%) — เช็คชื่อลูกค้า ยอด สินค้า ก่อนกดบันทึก';
+    return;
+  }
   if (type === 'cod') {
     if (d.date) $('cDate').value = d.date;
     if (d.carrier && cfg && (cfg.carriers || []).includes(d.carrier)) $('cCarrier').value = d.carrier;
     else if (d.carrier) { const c = (cfg.carriers || []).find(x => d.carrier.toLowerCase().includes(x.toLowerCase())); if (c) $('cCarrier').value = c; }
     if (d.tracking) $('cTrack').value = String(d.tracking).replace(/\s/g, '');
     if (d.customer) $('cCust').value = d.customer;
+    if (d.phone) $('cPhone').value = String(d.phone).replace(/\D/g, '');
+    if (d.province) $('cProv').value = d.province;
     if (d.items) $('cItems').value = d.items;
     if (d.cod_amount) $('cCod').value = Number(d.cod_amount).toFixed(2);
     if (d.freight) $('cFreight').value = Number(d.freight).toFixed(2);
@@ -293,6 +346,7 @@ $('fTotal').addEventListener('input', vatCalc); $('fVat').addEventListener('chan
 
 async function save() {
   if (type === 'cod') return saveCod();
+  if (type === 'sale') return saveSale();
   const total = Number($('fTotal').value);
   if (!total) return show('ใส่ยอดรวมก่อนค่ะ', 'err');
   if (!$('fDate').value) return show('ใส่วันที่ก่อนค่ะ', 'err');
@@ -322,6 +376,34 @@ async function save() {
   try { if (liff.isInClient()) await liff.sendMessages([{ type: 'text', text: lines.join('\n') }]); } catch (e) {}
 }
 
+async function saveSale() {
+  const amount = Number($('sAmount').value) || 0;
+  if (!amount) return show('ใส่ยอดขายก่อนค่ะ', 'err');
+  if (!$('sCust').value.trim()) return show('ใส่ชื่อลูกค้าก่อนค่ะ', 'err');
+  $('btnSave').disabled = true; show('<span class="spin"></span>กำลังบันทึก…', '');
+  const body = {
+    action: 'save', type: 'sale', image: imgB64, mime: imgMime,
+    date: $('sDate').value, business: 'YANG Haus', channel: $('sChannel').value, customer: $('sCust').value.trim(),
+    phone: $('sPhone').value.trim(), province: $('sProv').value.trim(), items: $('sItems').value.trim(), qty: $('sQty').value,
+    amount, invoice: $('sInv').value, invoiceNo: $('sInvNo').value.trim(), paid: $('sPaid').checked,
+    shipOut: $('sShip').value, ref: $('sRef').value.trim(), note: $('sNote').value.trim(), by: profile ? profile.displayName : ''
+  };
+  const r = await post(body);
+  $('btnSave').disabled = false;
+  if (r.dup) return show('⛔ รายการนี้บันทึกไปแล้ว ไม่รับซ้ำ → ' + r.where, 'err');
+  if (!r.ok) return show('บันทึกไม่สำเร็จ: ' + (r.error || ''), 'err');
+  const lines = [
+    '🧾 ขาย ' + body.channel + ' → แท็บขาย แถว ' + r.row + ' (' + r.ref + ')',
+    body.date + ' · ' + body.customer + (body.phone ? ' ' + body.phone : '') + (body.province ? ' · ' + body.province : ''),
+    body.items,
+    'ยอด ' + amount.toFixed(2) + (body.paid ? ' รับเงินแล้ว' : ' ⏳ ยังไม่ได้รับเงิน') + (body.invoice === 'เราออก' ? ' · ออกใบกำกับ' : ''),
+    r.photoUrl ? 'รูป: ' + r.photoUrl : ''
+  ].filter(Boolean);
+  $('sumBox').innerHTML = lines.map(l => l.replace(/^(.+?)( → .+)$/, '<b>$1</b>$2')).join('<br>');
+  $('s2').classList.add('hide'); $('s3').classList.remove('hide'); window.scrollTo(0, 0);
+  try { if (liff.isInClient()) await liff.sendMessages([{ type: 'text', text: lines.join('\n') }]); } catch (e) {}
+}
+
 async function saveCod() {
   const tracking = $('cTrack').value.trim();
   if (!tracking) return show('ใส่เลขพัสดุก่อนค่ะ', 'err');
@@ -334,6 +416,7 @@ async function saveCod() {
     action: 'save', type: 'cod', image: imgB64, mime: imgMime,
     date: $('cDate').value, business: 'YANG Haus', carrier: $('cCarrier').value, tracking, customer: $('cCust').value.trim(),
     channel: $('cChannel').value, items: $('cItems').value.trim(), qty: $('cQty').value, codAmount: cod,
+    phone: $('cPhone').value.trim(), province: $('cProv').value.trim(),
     freight, codFee: fee, vat, totalPaid: freight + fee + vat, paidNow: $('cPaid').checked, hasVat: $('cHasVat').checked,
     receiptNo: $('cRcpt').value.trim(), taxId: $('cTax').value.trim(), orderRef: $('cRef').value.trim(), note: $('cNote').value.trim(),
     by: profile ? profile.displayName : ''
@@ -384,7 +467,9 @@ async function savePaid() {
 function show(html, cls) { $('msg').innerHTML = '<div class="msg ' + cls + '">' + html + '</div>'; }
 function reset() {
   imgB64 = ''; ['fVendor', 'fInv', 'fTax', 'fItems', 'fTotal', 'fQty', 'fShip', 'fOrder', 'fNote'].forEach(i => $(i).value = '');
-  ['cTrack', 'cCust', 'cItems', 'cCod', 'cQty', 'cFreight', 'cFee', 'cVat', 'cRcpt', 'cTax', 'cRef', 'cNote'].forEach(i => $(i).value = '');
+  ['cTrack', 'cCust', 'cPhone', 'cProv', 'cItems', 'cCod', 'cQty', 'cFreight', 'cFee', 'cVat', 'cRcpt', 'cTax', 'cRef', 'cNote',
+   'sCust', 'sPhone', 'sProv', 'sItems', 'sAmount', 'sQty', 'sInvNo', 'sShip', 'sRef', 'sNote'].forEach(i => $(i).value = '');
+  $('sPaid').checked = true; $('sInv').value = 'ไม่ออก'; $('sDate').value = today();
   $('cPaid').checked = true; $('cHasVat').checked = false; $('cDate').value = today(); $('cHint').textContent = ''; $('cPaidSum').textContent = '';
   $('fVat').checked = false; $('fDate').value = today(); if (cfg) $('fSource').value = 'หน้าร้าน'; $('vatCalc').textContent = ''; $('vatNote').classList.add('hide');
   $('s2').classList.add('hide'); $('s3').classList.add('hide'); $('s4').classList.add('hide'); $('s1').classList.remove('hide'); window.scrollTo(0, 0);
