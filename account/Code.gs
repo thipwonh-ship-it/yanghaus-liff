@@ -127,7 +127,7 @@ function readReceipt_(b64, mime, type) {
 function saveRecord_(r) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   if (r.type === 'cod') return saveCod_(ss, r);
-  if (r.type === 'sale') return saveSale_(ss, r);
+  if (r.type === 'sale') { const u = requireAdmin_(r.idToken); if (!u.ok) return u; return saveSale_(ss, r); }
   const isBuy = r.type === 'buy';
   const sh = ss.getSheetByName(isBuy ? TAB_BUY : TAB_EXP);
   const d = r.date ? new Date(r.date + 'T00:00:00+07:00') : new Date();

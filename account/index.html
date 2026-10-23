@@ -55,7 +55,7 @@
     </div>
     <div class="seg" style="margin-top:8px">
       <button id="tCod" onclick="setType('cod')">📦 ส่ง COD</button>
-      <button id="tSale" onclick="setType('sale')">🧾 ขาย (โอน/ขายส่ง)</button>
+      <button id="tSale" class="hide" onclick="setType('sale')">🧾 ขาย (โอน/ขายส่ง)</button>
     </div>
     <div class="hint" id="tHint">ค่าแท็กซี่ Lalamove อุปกรณ์ ค่าโฆษณา บิลโทรศัพท์ ฯลฯ</div>
   </div>
@@ -220,7 +220,7 @@ async function init() {
     post({ action: 'whoami', idToken }).then(w => {
       if (!w.ok) return;
       $('whoBox').textContent = w.userId ? 'LINE userId: ' + w.userId + (w.admin ? ' (ผู้ดูแล)' : '') : (w.note || '');
-      if (w.admin) $('paidCard').classList.remove('hide');
+      if (w.admin) { $('paidCard').classList.remove('hide'); $('tSale').classList.remove('hide'); }
     });
   } catch (e) { $('who').textContent = 'นอก LINE'; }
   try { cfg = JSON.parse(localStorage.getItem('yh_cfg') || 'null'); } catch (e) {}
@@ -386,7 +386,7 @@ async function saveSale() {
     date: $('sDate').value, business: 'YANG Haus', channel: $('sChannel').value, customer: $('sCust').value.trim(),
     phone: $('sPhone').value.trim(), province: $('sProv').value.trim(), items: $('sItems').value.trim(), qty: $('sQty').value,
     amount, invoice: $('sInv').value, invoiceNo: $('sInvNo').value.trim(), paid: $('sPaid').checked,
-    shipOut: $('sShip').value, ref: $('sRef').value.trim(), note: $('sNote').value.trim(), by: profile ? profile.displayName : ''
+    shipOut: $('sShip').value, ref: $('sRef').value.trim(), note: $('sNote').value.trim(), by: profile ? profile.displayName : '', idToken
   };
   const r = await post(body);
   $('btnSave').disabled = false;
