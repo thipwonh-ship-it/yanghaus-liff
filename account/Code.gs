@@ -48,7 +48,7 @@ function doPost(e) {
 function getConfig_() {
   const sh = SpreadsheetApp.openById(SHEET_ID).getSheetByName(TAB_CFG);
   const col = c => sh.getRange(5, c, 40, 1).getValues().map(r => String(r[0]).trim()).filter(Boolean);
-  return { ok: true, business: col(1), suppliers: col(5), categories: col(7), carriers: col(11), hasAI: !!geminiKey_() };
+  return { ok: true, business: col(1), suppliers: col(5), categories: col(7), carriers: col(11), sources: col(13), hasAI: !!geminiKey_() };
 }
 
 /* ---------- read: ให้ Gemini อ่านใบเสร็จ ---------- */
@@ -76,15 +76,17 @@ function readReceipt_(b64, mime, type) {
     'receipt_no (receipt/document number if any), seller_tax_id (carrier 13-digit tax id, digits only, empty if none), ' +
     'confidence (0-1).'
     :
-    'You are reading a Thai receipt / tax invoice photo for bookkeeping. Return ONLY JSON with these keys:\n' +
+    'You are reading a Thai receipt / tax invoice photo, OR a screenshot of an online order page (Shopee, TikTok Shop, Lazada, Facebook, LINE, a website) for bookkeeping. Return ONLY JSON with these keys:\n' +
+    'source (where it was bought, best match from: ' + cfg.sources.join(' | ') + ' — detect from app UI/logo/colors: orange=Shopee, black=TikTok, blue/Lazada; a paper receipt from a shop = หน้าร้าน), ' +
+    'is_screenshot (true if this is a phone/app screenshot of an order rather than a paper receipt), ' +
     'date (YYYY-MM-DD; Thai year พ.ศ. minus 543; empty if unreadable), ' +
     'vendor (seller name, Thai as printed, no address), ' +
     'tax_id (seller 13-digit tax ID, digits only, empty if none), ' +
-    'invoice_no (document number), ' +
+    'invoice_no (document number; for an online order use the order number), ' +
     'items (short Thai summary of what was bought, max 60 chars), ' +
     'total (grand total paid, number), ' +
     'vat (VAT amount if shown, number or 0), ' +
-    'is_tax_invoice (true only if the document is a ใบกำกับภาษี: has the words ใบกำกับภาษี, seller tax ID and a VAT line; ABB/ใบกำกับภาษีอย่างย่อ also true), ' +
+    'is_tax_invoice (true only if the document is a ใบกำกับภาษี: has the words ใบกำกับภาษี, seller tax ID and a VAT line; ABB/ใบกำกับภาษีอย่างย่อ also true; an order screenshot is false), ' +
     'is_goods (true if items are wheels/tires/ล้อ/ยาง bought for resale, else false), ' +
     'category (best match from this list: ' + cats.join(' | ') + '), ' +
     'confidence (0-1).';
@@ -146,11 +148,11 @@ function saveRecord_(r) {
   if (isBuy) {
     // A วันที่ B ธุรกิจ C ซัพพลายเออร์ D สินค้า E จำนวน F ยอดรวม G มีใบกำกับ | H,I สูตร | J เลขใบกำกับ K ขนส่งเข้า L อ้างอิงออเดอร์ M หมายเหตุ N รูป O เลขผู้เสียภาษี
     sh.getRange(row, 1, 1, 7).setValues([[d, r.business || 'YANG Haus', r.vendor || '', r.items || '', Number(r.qty) || '', total, hasVat]]);
-    sh.getRange(row, 10, 1, 6).setValues([[invNo, Number(r.shipIn) || '', r.orderRef || '', note, photoUrl, r.taxId || '']]);
+    sh.getRange(row, 10, 1, 7).setValues([[invNo, Number(r.shipIn) || '', r.orderRef || '', note, photoUrl, r.taxId || '', r.source || '']]);
   } else {
     // A วันที่ B ธุรกิจ C ประเภท D รายละเอียด E ยอด F มีใบกำกับ | G,H สูตร | I ผู้ขาย J อ้างอิงออเดอร์ K หมายเหตุ L เลขใบกำกับ M เลขผู้เสียภาษี N รูป
     sh.getRange(row, 1, 1, 6).setValues([[d, r.business || 'YANG Haus', r.category || 'อื่นๆ', r.items || '', total, hasVat]]);
-    sh.getRange(row, 9, 1, 6).setValues([[r.vendor || '', r.orderRef || '', note, invNo, r.taxId || '', photoUrl]]);
+    sh.getRange(row, 9, 1, 7).setValues([[r.vendor || '', r.orderRef || '', note, invNo, r.taxId || '', photoUrl, r.source || '']]);
   }
   sh.getRange(row, 1).setNumberFormat('yyyy-mm-dd');
   if (invNo) sh.getRange(row, isBuy ? 10 : 12).setNumberFormat('@');

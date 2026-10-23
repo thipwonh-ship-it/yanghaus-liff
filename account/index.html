@@ -113,7 +113,10 @@
       <div><label>วันที่ในใบเสร็จ</label><input id="fDate" type="date"></div>
       <div><label>ธุรกิจ</label><select id="fBiz"></select></div>
     </div>
-    <label id="lVendor">ผู้ขาย / ร้าน</label><input id="fVendor" type="text" list="supList"><datalist id="supList"></datalist>
+    <div class="row">
+      <div style="flex:2"><label id="lVendor">ผู้ขาย / ร้าน</label><input id="fVendor" type="text" list="supList"><datalist id="supList"></datalist></div>
+      <div><label>ซื้อจาก</label><select id="fSource"></select></div>
+    </div>
     <div class="row">
       <div><label>เลขที่ใบกำกับ/ใบเสร็จ</label><input id="fInv" type="text"></div>
       <div><label>เลขผู้เสียภาษีผู้ขาย</label><input id="fTax" type="text" inputmode="numeric" maxlength="13"></div>
@@ -196,6 +199,7 @@ function fillConfig() {
   fill($('fBiz'), cfg.business, 'YANG Haus');
   fill($('fCat'), cfg.categories, 'อื่นๆ');
   fill($('cCarrier'), cfg.carriers || ['Flash', 'NNP', 'อื่นๆ'], 'Flash');
+  fill($('fSource'), cfg.sources || ['หน้าร้าน', 'Shopee', 'TikTok', 'Lazada', 'อื่นๆ'], 'หน้าร้าน');
   $('supList').innerHTML = (cfg.suppliers || []).map(s => `<option value="${s}">`).join('');
 }
 function fill(sel, arr, def) { const v = sel.value; sel.innerHTML = (arr || []).map(x => `<option>${x}</option>`).join(''); sel.value = (arr || []).includes(v) ? v : def; }
@@ -245,6 +249,7 @@ async function gotPhoto(inp) {
     return;
   }
   if (d.date) $('fDate').value = d.date;
+  if (d.source && cfg && (cfg.sources || []).includes(d.source)) $('fSource').value = d.source;
   if (d.vendor) $('fVendor').value = d.vendor;
   if (d.invoice_no) $('fInv').value = d.invoice_no;
   if (d.tax_id) $('fTax').value = String(d.tax_id).replace(/\D/g, '');
@@ -255,7 +260,7 @@ async function gotPhoto(inp) {
   if (d.category && cfg && cfg.categories.includes(d.category)) $('fCat').value = d.category;
   catChanged(); vatCalc();
   $('aiBox').className = 'ai good';
-  $('aiBox').textContent = 'AI อ่านให้แล้ว (' + Math.round((d.confidence || 0) * 100) + '%) — เช็คยอดกับใบจริงก่อนกดบันทึก';
+  $('aiBox').textContent = 'AI อ่านให้แล้ว (' + Math.round((d.confidence || 0) * 100) + '%) — เช็คยอดกับใบจริงก่อนกดบันทึก' + (d.is_screenshot ? ' · แคปหน้าจอ = ไม่ใช่ใบกำกับ เคลม VAT ไม่ได้ ถ้ามีใบกำกับจากร้านค่อยถ่ายเพิ่ม' : '');
 }
 
 const COD_FEE_RATE = { 'Flash': 0.025, 'NNP': 0.03 };   // COD fee = % ของยอด COD (NNP เก็บสดนอกใบเสร็จ)
@@ -295,7 +300,7 @@ async function save() {
   const body = {
     action: 'save', type, image: imgB64, mime: imgMime,
     date: $('fDate').value, business: $('fBiz').value, vendor: $('fVendor').value.trim(),
-    invoiceNo: $('fInv').value.trim(), taxId: $('fTax').value.trim(), category: $('fCat').value,
+    invoiceNo: $('fInv').value.trim(), taxId: $('fTax').value.trim(), category: $('fCat').value, source: $('fSource').value,
     items: $('fItems').value.trim(), total, qty: $('fQty').value, hasVat: $('fVat').checked,
     shipIn: $('fShip').value, orderRef: $('fOrder').value.trim(), note: $('fNote').value.trim(),
     by: profile ? profile.displayName : ''
@@ -306,7 +311,7 @@ async function save() {
   if (!r.ok) return show('บันทึกไม่สำเร็จ: ' + (r.error || ''), 'err');
   const lines = [
     '🧾 จดบัญชีแล้ว → แท็บ ' + r.tab + ' แถว ' + r.row,
-    body.date + ' · ' + (body.vendor || '-'),
+    body.date + ' · ' + (body.vendor || '-') + ' (' + body.source + ')',
     body.items,
     'ยอด ' + total.toFixed(2) + (body.hasVat ? ' (VAT ' + r.vat.toFixed(2) + ' เคลมได้)' : ' (ไม่มีใบกำกับ)'),
     body.invoiceNo ? 'เลขที่ ' + body.invoiceNo : '',
@@ -381,7 +386,7 @@ function reset() {
   imgB64 = ''; ['fVendor', 'fInv', 'fTax', 'fItems', 'fTotal', 'fQty', 'fShip', 'fOrder', 'fNote'].forEach(i => $(i).value = '');
   ['cTrack', 'cCust', 'cItems', 'cCod', 'cQty', 'cFreight', 'cFee', 'cVat', 'cRcpt', 'cTax', 'cRef', 'cNote'].forEach(i => $(i).value = '');
   $('cPaid').checked = true; $('cHasVat').checked = false; $('cDate').value = today(); $('cHint').textContent = ''; $('cPaidSum').textContent = '';
-  $('fVat').checked = false; $('fDate').value = today(); $('vatCalc').textContent = ''; $('vatNote').classList.add('hide');
+  $('fVat').checked = false; $('fDate').value = today(); if (cfg) $('fSource').value = 'หน้าร้าน'; $('vatCalc').textContent = ''; $('vatNote').classList.add('hide');
   $('s2').classList.add('hide'); $('s3').classList.add('hide'); $('s4').classList.add('hide'); $('s1').classList.remove('hide'); window.scrollTo(0, 0);
 }
 function closeApp() { try { liff.closeWindow(); } catch (e) { window.close(); } }
