@@ -8,7 +8,7 @@
 | ชิ้น | อยู่ที่ไหน | หน้าที่ |
 |---|---|---|
 | `index.html` | โฟลเดอร์ `account/` ใน repo yanghaus-liff → GitHub Pages `https://thipwonh-ship-it.github.io/yanghaus-liff/account/` | หน้าฟอร์มในไลน์: ถ่ายรูป ย่อรูป ส่งให้ Apps Script |
-| `Code.gs` | ชีท YANG Haus บัญชีซื้อ-ขาย 2026 → ส่วนขยาย → Apps Script → Deploy เป็น Web app | เรียก Gemini อ่านรูป / เซฟรูปลง Drive / เขียนแถวลงชีท |
+| `Code.gs` | [ชีท YANG Haus บัญชีซื้อ-ขาย 2026](https://docs.google.com/spreadsheets/d/17gY8l9pkJjIXqZWRfStYwga-xasJjef97HaHfI7KIB4/edit) → ส่วนขยาย → Apps Script (หรือ https://script.google.com/home) → Deploy เป็น Web app | เรียก Gemini อ่านรูป / เซฟรูปลง Drive / เขียนแถวลงชีท |
 | LINE | developers.line.biz → Provider **YangHaus** → channel "YH ขนส่ง Login" → LIFF ใหม่ | ปุ่ม Rich menu เปิดหน้าฟอร์ม |
 
 - ชีท: `17gY8l9pkJjIXqZWRfStYwga-xasJjef97HaHfI7KIB4`
