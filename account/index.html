@@ -260,7 +260,7 @@ async function gotPhoto(inp) {
   if (d.category && cfg && cfg.categories.includes(d.category)) $('fCat').value = d.category;
   catChanged(); vatCalc();
   $('aiBox').className = 'ai good';
-  $('aiBox').textContent = 'AI อ่านให้แล้ว (' + Math.round((d.confidence || 0) * 100) + '%) — เช็คยอดกับใบจริงก่อนกดบันทึก' + (d.is_screenshot ? ' · แคปหน้าจอ = ไม่ใช่ใบกำกับ เคลม VAT ไม่ได้ ถ้ามีใบกำกับจากร้านค่อยถ่ายเพิ่ม' : '');
+  $('aiBox').textContent = 'AI อ่านให้แล้ว (' + Math.round((d.confidence || 0) * 100) + '%) — เช็คยอดกับใบจริงก่อนกดบันทึก' + (d.doc_type === 'transfer_slip' ? ' · สลิปโอน = หลักฐานจ่าย ไม่ใช่ใบกำกับ กรอก "รายละเอียด" ว่าซื้ออะไรด้วย' : d.is_screenshot || d.doc_type === 'order_screenshot' ? ' · แคปหน้าจอ = ไม่ใช่ใบกำกับ เคลม VAT ไม่ได้ ถ้ามีใบกำกับจากร้านค่อยถ่ายเพิ่ม' : '');
 }
 
 const COD_FEE_RATE = { 'Flash': 0.025, 'NNP': 0.03 };   // COD fee = % ของยอด COD (NNP เก็บสดนอกใบเสร็จ)

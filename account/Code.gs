@@ -76,14 +76,15 @@ function readReceipt_(b64, mime, type) {
     'receipt_no (receipt/document number if any), seller_tax_id (carrier 13-digit tax id, digits only, empty if none), ' +
     'confidence (0-1).'
     :
-    'You are reading a Thai receipt / tax invoice photo, OR a screenshot of an online order page (Shopee, TikTok Shop, Lazada, Facebook, LINE, a website) for bookkeeping. Return ONLY JSON with these keys:\n' +
+    'You are reading, for bookkeeping, one of: a Thai receipt / tax invoice photo, a screenshot of an online order page (Shopee, TikTok Shop, Lazada, Facebook, LINE, a website), or a bank transfer slip (สลิปโอนเงิน from a Thai banking app: shows payer, recipient name/account, amount, date-time, transaction ref). Return ONLY JSON with these keys:\n' +
+    'doc_type (one of: tax_invoice | receipt | order_screenshot | transfer_slip), ' +
     'source (where it was bought, best match from: ' + cfg.sources.join(' | ') + ' — detect from app UI/logo/colors: orange=Shopee, black=TikTok, blue/Lazada; a paper receipt from a shop = หน้าร้าน), ' +
     'is_screenshot (true if this is a phone/app screenshot of an order rather than a paper receipt), ' +
     'date (YYYY-MM-DD; Thai year พ.ศ. minus 543; empty if unreadable), ' +
-    'vendor (seller name, Thai as printed, no address), ' +
+    'vendor (seller name as printed, no address; for a transfer slip use the recipient/payee name), ' +
     'tax_id (seller 13-digit tax ID, digits only, empty if none), ' +
-    'invoice_no (document number; for an online order use the order number), ' +
-    'items (short Thai summary of what was bought, max 60 chars), ' +
+    'invoice_no (document number; online order → order number; transfer slip → transaction reference/เลขที่รายการ), ' +
+    'items (short Thai summary of what was bought, max 60 chars; transfer slip → use the memo/บันทึกช่วยจำ if any, else empty), ' +
     'total (grand total paid, number), ' +
     'vat (VAT amount if shown, number or 0), ' +
     'is_tax_invoice (true only if the document is a ใบกำกับภาษี: has the words ใบกำกับภาษี, seller tax ID and a VAT line; ABB/ใบกำกับภาษีอย่างย่อ also true; an order screenshot is false), ' +
