@@ -35,6 +35,8 @@ function doPost(e) {
       case 'read':   return json_(readReceipt_(req.image, req.mime, req.type));
       case 'save':   return json_(saveRecord_(req));
       case 'whoami':     return json_(whoami_(req.idToken));
+      case 'buyPending': return json_(buyPending_(req.vendor));
+      case 'buyMatch':   return json_(buyMatch_(req));
       case 'codPending': { const u = requireAdmin_(req.idToken); return json_(u.ok ? codPending_() : u); }
       case 'codPaid':    { const u = requireAdmin_(req.idToken); return json_(u.ok ? codPaid_(req.items, u.name) : u); }
       default:       return json_({ ok: false, error: 'unknown action' });
@@ -192,6 +194,53 @@ function saveRecord_(r) {
   if (r.taxId) sh.getRange(row, isBuy ? 15 : 13).setNumberFormat('@');
 
   return { ok: true, row: row, tab: sh.getName(), photoUrl: photoUrl, vat: hasVat ? +(total - total / 1.07).toFixed(2) : 0 };
+}
+
+/* ---------- ซื้อ: ใบส่งของที่ยังรอใบกำกับตัวจริง (Q = FALSE, G = TRUE) ---------- */
+function buyPending_(vendor) {
+  const sh = SpreadsheetApp.openById(SHEET_ID).getSheetByName(TAB_BUY);
+  const last = sh.getLastRow();
+  if (last < 2) return { ok: true, items: [] };
+  const v = sh.getRange(2, 1, last - 1, 17).getValues();
+  const norm = x => String(x || '').replace(/\s+/g, '').toLowerCase();
+  const items = [];
+  v.forEach((row, i) => {
+    if (!row[0] || row[6] !== true || row[16] === true) return;
+    const sameVendor = !vendor || norm(row[2]).indexOf(norm(vendor).slice(0, 6)) >= 0 || norm(vendor).indexOf(norm(row[2]).slice(0, 6)) >= 0;
+    items.push({ row: i + 2, date: row[0] instanceof Date ? Utilities.formatDate(row[0], 'Asia/Bangkok', 'yyyy-MM-dd') : String(row[0]),
+      vendor: row[2], items: row[3], total: Number(row[5]) || 0, docNo: String(row[9] || ''), sameVendor: sameVendor });
+  });
+  items.sort((a, b) => (b.sameVendor - a.sameVendor) || (a.date < b.date ? -1 : 1));
+  return { ok: true, items: items };
+}
+
+/* จับคู่ใบกำกับตัวจริง 1 ใบ กับใบส่งของหลายแถว: ใส่เลขใบกำกับ + ติ๊ก Q + เก็บรูป */
+function buyMatch_(r) {
+  const sh = SpreadsheetApp.openById(SHEET_ID).getSheetByName(TAB_BUY);
+  const invNo = String(r.invoiceNo || '').trim();
+  if (!invNo) return { ok: false, error: 'ต้องมีเลขที่ใบกำกับ' };
+  const rows = (r.rows || []).map(Number).filter(Boolean);
+  if (!rows.length) return { ok: false, error: 'ยังไม่ได้เลือกใบส่งของ' };
+  let url = '';
+  if (r.image) {
+    const d = r.date ? new Date(r.date + 'T00:00:00+07:00') : new Date();
+    const ym = Utilities.formatDate(d, 'Asia/Bangkok', 'yyyy-MM'), ymd = Utilities.formatDate(d, 'Asia/Bangkok', 'yyyy-MM-dd');
+    const folder = getOrCreate_(getOrCreate_(DriveApp.getFolderById(FOLDER_ID), ym), SUB_VAT);
+    url = folder.createFile(Utilities.newBlob(Utilities.base64Decode(r.image), r.mime || 'image/jpeg', ymd + '_ต้นฉบับ_' + invNo.replace(/[\\/:*?"<>|]/g, '') + '.jpg')).getUrl();
+  }
+  let sum = 0;
+  rows.forEach(row => {
+    const cur = sh.getRange(row, 1, 1, 17).getValues()[0];
+    if (!cur[0] || cur[16] === true) return;
+    sum += Number(cur[5]) || 0;
+    const oldNo = String(cur[9] || '');
+    sh.getRange(row, 10).setValue(invNo).setNumberFormat('@');
+    if (r.taxId) sh.getRange(row, 15).setValue(String(r.taxId)).setNumberFormat('@');
+    if (r.invoiceDate) { sh.getRange(row, 1).setValue(new Date(r.invoiceDate + 'T00:00:00+07:00')).setNumberFormat('yyyy-mm-dd'); }
+    sh.getRange(row, 17).setValue(true);
+    sh.getRange(row, 13).setValue([String(cur[12] || ''), (oldNo && oldNo !== invNo ? 'ใบส่งของ ' + oldNo : ''), 'ต้นฉบับใบกำกับรับแล้ว ' + Utilities.formatDate(new Date(), 'Asia/Bangkok', 'd/M') + (url ? ' ' + url : '')].filter(Boolean).join(' | '));
+  });
+  return { ok: true, count: rows.length, sum: sum, invoiceTotal: Number(r.total) || 0, diff: +(sum - (Number(r.total) || 0)).toFixed(2), photoUrl: url };
 }
 
 /* ---------- สิทธิ์: ตรวจ ID token กับ LINE แล้วเช็ค userId ใน COD_ADMINS ---------- */

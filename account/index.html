@@ -170,6 +170,11 @@
       </div>
       <div class="hint" id="dHint">ตัวจริงตามมาทีหลัง → ระบบติดสถานะ "รอใบกำกับตัวจริง" พอได้ตัวจริงค่อยถ่ายอีกครั้งด้วยปุ่มนี้</div>
     </div>
+    <div id="gMatch" class="hide">
+      <div class="ai">ใบกำกับนี้ครอบคลุมใบส่งของใบไหนบ้าง? ติ๊กให้ยอดรวมเท่ากับยอดใบกำกับ</div>
+      <div id="mList"></div>
+      <div class="hint" id="mSum"></div>
+    </div>
     <div class="chk"><input id="fVat" type="checkbox"><span>มีใบกำกับภาษี (เคลม VAT ซื้อได้) <span id="vatCalc" class="hint" style="display:inline"></span></span></div>
     <div id="vatNote" class="hint hide"></div>
     <div id="gBuy" class="hide">
@@ -216,8 +221,25 @@ const LIFF_ID = '2012109669-kGPX1UtI';
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxm5fuyVniisAk14alXdzSMDsvrf_iQ_lI6Ti6hDDPOs--PSsZMVabqC_OwOP7Paa0SWA/exec';
 
 let docType = 'copy';
+let pendingBuy = [];
+async function loadPendingBuy() {
+  $('gMatch').classList.remove('hide'); $('mList').innerHTML = '<span class="spin"></span>กำลังดูใบส่งของที่ค้าง…'; $('mSum').textContent = '';
+  const r = await post({ action: 'buyPending', vendor: $('fVendor').value.trim() });
+  pendingBuy = (r.ok && r.items) || [];
+  if (!pendingBuy.length) { $('gMatch').classList.add('hide'); return; }
+  $('mList').innerHTML = pendingBuy.map((x, i) => `<div class="pi"><input type="checkbox" id="mc${i}" onchange="matchSum()" ${x.sameVendor ? 'checked' : ''}><div class="t"><b>${x.docNo || '(ไม่มีเลขที่)'} · ${x.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</b>${x.date} · ${x.vendor}${x.items ? ' · ' + x.items : ''}</div></div>`).join('');
+  matchSum();
+}
+function matchSum() {
+  const total = Number($('fTotal').value) || 0;
+  const sum = pendingBuy.reduce((s, x, i) => s + ($('mc' + i) && $('mc' + i).checked ? x.total : 0), 0);
+  const d = sum - total;
+  $('mSum').innerHTML = 'ติ๊กรวม <b>' + sum.toLocaleString(undefined, { minimumFractionDigits: 2 }) + '</b> / ยอดใบกำกับ ' + total.toLocaleString(undefined, { minimumFractionDigits: 2 }) +
+    (Math.abs(d) < 0.01 ? ' ✅ ตรงกัน' : ' ⚠️ ต่าง ' + d.toFixed(2) + ' — เช็คอีกที (บันทึกได้แต่จะมีหมายเหตุ)');
+}
 function setDoc(x) {
   docType = x;
+  if (x === 'original' && type === 'buy') loadPendingBuy(); else { $('gMatch').classList.add('hide'); pendingBuy = []; }
   $('dCopy').classList.toggle('on', x === 'copy'); $('dOrig').classList.toggle('on', x === 'original');
   $('dHint').textContent = x === 'original' ? 'ถ้าเลขที่ใบกำกับนี้เคยลงไว้แล้ว (จากใบส่งของ) ระบบจะไม่ลงซ้ำ แค่ติ๊ก "ตัวจริงรับแล้ว" + เก็บรูป' : 'ตัวจริงตามมาทีหลัง → ระบบติดสถานะ "รอใบกำกับตัวจริง" พอได้ตัวจริงค่อยถ่ายอีกครั้งด้วยปุ่มนี้';
 }
@@ -357,12 +379,29 @@ function vatCalc() {
   const t = Number($('fTotal').value) || 0;
   $('vatCalc').textContent = ($('fVat').checked && t) ? '→ VAT ' + (t - t / 1.07).toFixed(2) : '';
 }
-$('fTotal').addEventListener('input', vatCalc); $('fVat').addEventListener('change', vatCalc);
+$('fTotal').addEventListener('input', () => { vatCalc(); if (pendingBuy.length) matchSum(); }); $('fVat').addEventListener('change', vatCalc);
 
 async function save() {
   if (type === 'cod') return saveCod();
   if (type === 'sale') return saveSale();
   const total = Number($('fTotal').value);
+  if (type === 'buy' && docType === 'original' && pendingBuy.length) {
+    const rows = pendingBuy.filter((x, i) => $('mc' + i) && $('mc' + i).checked).map(x => x.row);
+    if (rows.length) {
+      if (!$('fInv').value.trim()) return show('ใส่เลขที่ใบกำกับก่อนค่ะ', 'err');
+      const sum = pendingBuy.filter((x, i) => $('mc' + i) && $('mc' + i).checked).reduce((s, x) => s + x.total, 0);
+      if (Math.abs(sum - total) >= 0.01 && !confirm('ยอดใบส่งของที่ติ๊ก ' + sum.toFixed(2) + ' ไม่เท่ายอดใบกำกับ ' + total.toFixed(2) + ' บันทึกต่อไหม?')) return;
+      $('btnSave').disabled = true; show('<span class="spin"></span>กำลังจับคู่ + เก็บรูป…', '');
+      const r = await post({ action: 'buyMatch', rows, invoiceNo: $('fInv').value.trim(), taxId: $('fTax').value.trim(), invoiceDate: $('fDate').value, total, image: imgB64, mime: imgMime });
+      $('btnSave').disabled = false;
+      if (!r.ok) return show('ไม่สำเร็จ: ' + (r.error || ''), 'err');
+      const lines = ['✅ ใบกำกับ ' + $('fInv').value.trim() + ' จับคู่ใบส่งของ ' + r.count + ' ใบ รวม ' + r.sum.toFixed(2) + (Math.abs(r.diff) >= 0.01 ? ' ⚠️ ต่างจากใบกำกับ ' + r.diff.toFixed(2) : ' ✓ ตรงกับใบกำกับ'), r.photoUrl ? 'รูป: ' + r.photoUrl : ''].filter(Boolean);
+      $('sumBox').innerHTML = lines.join('<br>');
+      $('s2').classList.add('hide'); $('s3').classList.remove('hide'); window.scrollTo(0, 0);
+      try { if (liff.isInClient()) await liff.sendMessages([{ type: 'text', text: lines.join('\n') }]); } catch (e) {}
+      return;
+    }
+  }
   if (!total) return show('ใส่ยอดรวมก่อนค่ะ', 'err');
   if (!$('fDate').value) return show('ใส่วันที่ก่อนค่ะ', 'err');
   $('btnSave').disabled = true; show('<span class="spin"></span>กำลังบันทึก + เก็บรูปลง Drive…', '');
@@ -489,7 +528,7 @@ function reset() {
    'sCust', 'sPhone', 'sProv', 'sItems', 'sAmount', 'sQty', 'sInvNo', 'sShip', 'sRef', 'sNote'].forEach(i => $(i).value = '');
   $('sPaid').checked = true; $('sInv').value = 'ไม่ออก'; $('sDate').value = today();
   $('cPaid').checked = true; $('cHasVat').checked = false; $('cDate').value = today(); $('cHint').textContent = ''; $('cPaidSum').textContent = '';
-  $('fVat').checked = false; $('fDate').value = today(); if (cfg) $('fSource').value = 'หน้าร้าน'; setDoc('copy'); $('vatCalc').textContent = ''; $('vatNote').classList.add('hide');
+  $('fVat').checked = false; $('fDate').value = today(); if (cfg) $('fSource').value = 'หน้าร้าน'; pendingBuy = []; $('gMatch').classList.add('hide'); setDoc('copy'); $('vatCalc').textContent = ''; $('vatNote').classList.add('hide');
   $('s2').classList.add('hide'); $('s3').classList.add('hide'); $('s4').classList.add('hide'); $('s1').classList.remove('hide'); window.scrollTo(0, 0);
 }
 function closeApp() { try { liff.closeWindow(); } catch (e) { window.close(); } }
