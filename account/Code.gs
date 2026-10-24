@@ -85,7 +85,7 @@ function readReceipt_(b64, mime, type) {
     'confidence (0-1).'
     :
     'You are reading, for bookkeeping, one of: a Thai receipt / tax invoice photo, a screenshot of an online order page (Shopee, TikTok Shop, Lazada, Facebook, LINE, a website), or a bank transfer slip (สลิปโอนเงิน from a Thai banking app: shows payer, recipient name/account, amount, date-time, transaction ref). Return ONLY JSON with these keys:\n' +
-    'doc_type (one of: tax_invoice | receipt | order_screenshot | transfer_slip), ' +
+    'doc_type (one of: tax_invoice_original (ต้นฉบับใบกำกับภาษี) | tax_invoice_copy (สำเนาใบกำกับภาษี) | delivery_note (ใบส่งสินค้า/ใบแจ้งหนี้/ใบส่งของ) | receipt | order_screenshot | transfer_slip), ' +
     'source (where it was bought, best match from: ' + cfg.sources.join(' | ') + ' — detect from app UI/logo/colors: orange=Shopee, black=TikTok, blue/Lazada; a paper receipt from a shop = หน้าร้าน), ' +
     'is_screenshot (true if this is a phone/app screenshot of an order rather than a paper receipt), ' +
     'date (YYYY-MM-DD; Thai year พ.ศ. minus 543; empty if unreadable), ' +
@@ -95,7 +95,7 @@ function readReceipt_(b64, mime, type) {
     'items (short Thai summary of what was bought, max 60 chars; transfer slip → use the memo/บันทึกช่วยจำ if any, else empty), ' +
     'total (grand total paid, number), ' +
     'vat (VAT amount if shown, number or 0), ' +
-    'is_tax_invoice (true only if the document is a ใบกำกับภาษี: has the words ใบกำกับภาษี, seller tax ID and a VAT line; ABB/ใบกำกับภาษีอย่างย่อ also true; an order screenshot is false), ' +
+    'is_tax_invoice (true if the document is or references a ใบกำกับภาษี with seller tax ID and VAT line — original or copy both true; a delivery note that shows a VAT line and tax-invoice number is also true; ABB/ใบกำกับภาษีอย่างย่อ true; an order screenshot is false), ' +
     'is_goods (true if items are wheels/tires/ล้อ/ยาง bought for resale, else false), ' +
     'category (best match from this list: ' + cats.join(' | ') + '), ' +
     'confidence (0-1).';
@@ -135,6 +135,28 @@ function saveRecord_(r) {
   const hasVat = !!r.hasVat;
   const invNo = String(r.invoiceNo || '').trim();
 
+  // ซื้อ: ใบกำกับตัวจริงมาทีหลัง → ถ้าเลขที่เดิมมีอยู่แล้ว ไม่ลงซ้ำ แค่ติ๊ก Q "ใบกำกับตัวจริงรับแล้ว" + เก็บรูปตัวจริง
+  if (isBuy && r.docType === 'original' && invNo) {
+    const last = sh.getLastRow();
+    if (last >= 2) {
+      const inv = sh.getRange(2, 10, last - 1, 1).getValues().map(x => String(x[0]).trim().toUpperCase());
+      const i = inv.indexOf(invNo.toUpperCase());
+      if (i >= 0) {
+        const row = i + 2;
+        let url = '';
+        if (r.image) {
+          const ym = Utilities.formatDate(d, 'Asia/Bangkok', 'yyyy-MM'), ymd = Utilities.formatDate(d, 'Asia/Bangkok', 'yyyy-MM-dd');
+          const folder = getOrCreate_(getOrCreate_(DriveApp.getFolderById(FOLDER_ID), ym), SUB_VAT);
+          url = folder.createFile(Utilities.newBlob(Utilities.base64Decode(r.image), r.mime || 'image/jpeg', ymd + '_ต้นฉบับ_' + invNo.replace(/[\\/:*?"<>|]/g, '') + '.jpg')).getUrl();
+        }
+        sh.getRange(row, 17).setValue(true);
+        const note = sh.getRange(row, 13).getValue();
+        sh.getRange(row, 13).setValue([note, 'ต้นฉบับใบกำกับรับแล้ว ' + Utilities.formatDate(new Date(), 'Asia/Bangkok', 'd/M') + (url ? ' ' + url : '')].filter(Boolean).join(' | '));
+        return { ok: true, markedOriginal: true, row: row, tab: sh.getName(), photoUrl: url };
+      }
+    }
+  }
+
   // กันบันทึกซ้ำ (ปฏิเสธ ไม่ถาม): 1) เลขที่ใบกำกับซ้ำในแท็บไหนก็ได้  2) วันที่+ผู้ขาย+ยอด เท่ากัน
   const dup = findDuplicate_(ss, invNo, d, r.vendor, total);
   if (dup) return { ok: false, dup: true, where: dup };
@@ -158,7 +180,8 @@ function saveRecord_(r) {
   if (isBuy) {
     // A วันที่ B ธุรกิจ C ซัพพลายเออร์ D สินค้า E จำนวน F ยอดรวม G มีใบกำกับ | H,I สูตร | J เลขใบกำกับ K ขนส่งเข้า L อ้างอิงออเดอร์ M หมายเหตุ N รูป O เลขผู้เสียภาษี
     sh.getRange(row, 1, 1, 7).setValues([[d, r.business || 'YANG Haus', r.vendor || '', r.items || '', Number(r.qty) || '', total, hasVat]]);
-    sh.getRange(row, 10, 1, 7).setValues([[invNo, Number(r.shipIn) || '', r.orderRef || '', note, photoUrl, r.taxId || '', r.source || '']]);
+    const gotOriginal = r.docType === 'original' || !hasVat;
+    sh.getRange(row, 10, 1, 8).setValues([[invNo, Number(r.shipIn) || '', r.orderRef || '', [note, (hasVat && !gotOriginal) ? 'รอใบกำกับตัวจริง' : ''].filter(Boolean).join(' | '), photoUrl, r.taxId || '', r.source || '', gotOriginal]]);
   } else {
     // A วันที่ B ธุรกิจ C ประเภท D รายละเอียด E ยอด F มีใบกำกับ | G,H สูตร | I ผู้ขาย J อ้างอิงออเดอร์ K หมายเหตุ L เลขใบกำกับ M เลขผู้เสียภาษี N รูป
     sh.getRange(row, 1, 1, 6).setValues([[d, r.business || 'YANG Haus', r.category || 'อื่นๆ', r.items || '', total, hasVat]]);

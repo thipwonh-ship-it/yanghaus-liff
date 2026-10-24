@@ -162,6 +162,14 @@
       <div><label>ยอดรวมที่จ่าย (บาท)</label><input id="fTotal" type="number" step="0.01" inputmode="decimal"></div>
       <div id="gQty" class="hide"><label>จำนวน (เส้น/วง)</label><input id="fQty" type="number" inputmode="numeric"></div>
     </div>
+    <div id="gDoc" class="hide">
+      <label>เอกสารที่ได้ตอนนี้</label>
+      <div class="seg">
+        <button type="button" id="dCopy" class="on" onclick="setDoc('copy')">📄 ใบส่งของ / สำเนา</button>
+        <button type="button" id="dOrig" onclick="setDoc('original')">✅ ใบกำกับตัวจริง</button>
+      </div>
+      <div class="hint" id="dHint">ตัวจริงตามมาทีหลัง → ระบบติดสถานะ "รอใบกำกับตัวจริง" พอได้ตัวจริงค่อยถ่ายอีกครั้งด้วยปุ่มนี้</div>
+    </div>
     <div class="chk"><input id="fVat" type="checkbox"><span>มีใบกำกับภาษี (เคลม VAT ซื้อได้) <span id="vatCalc" class="hint" style="display:inline"></span></span></div>
     <div id="vatNote" class="hint hide"></div>
     <div id="gBuy" class="hide">
@@ -207,6 +215,12 @@
 const LIFF_ID = '2012109669-kGPX1UtI';
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxm5fuyVniisAk14alXdzSMDsvrf_iQ_lI6Ti6hDDPOs--PSsZMVabqC_OwOP7Paa0SWA/exec';
 
+let docType = 'copy';
+function setDoc(x) {
+  docType = x;
+  $('dCopy').classList.toggle('on', x === 'copy'); $('dOrig').classList.toggle('on', x === 'original');
+  $('dHint').textContent = x === 'original' ? 'ถ้าเลขที่ใบกำกับนี้เคยลงไว้แล้ว (จากใบส่งของ) ระบบจะไม่ลงซ้ำ แค่ติ๊ก "ตัวจริงรับแล้ว" + เก็บรูป' : 'ตัวจริงตามมาทีหลัง → ระบบติดสถานะ "รอใบกำกับตัวจริง" พอได้ตัวจริงค่อยถ่ายอีกครั้งด้วยปุ่มนี้';
+}
 let type = 'exp', imgB64 = '', imgMime = 'image/jpeg', profile = null, cfg = null, hasAI = true, idToken = '';
 const $ = id => document.getElementById(id);
 
@@ -249,7 +263,7 @@ function setType(t) {
     : t === 'sale' ? 'ขายที่ลูกค้าโอนเงิน (Facebook/LINE/ขายส่ง) → ถ่ายสลิปที่ลูกค้าโอน หรือแคปแชทออเดอร์ → ลงแท็บขาย + รายชื่อลูกค้า'
     : 'ของใช้เอง: เครื่องปริ้น (เลือกประเภท สินทรัพย์) หมึก อุปกรณ์ ค่าแท็กซี่ Lalamove ค่าโฆษณา บิลโทรศัพท์ ฯลฯ';
   $('gCod').classList.toggle('hide', t !== 'cod'); $('gSale').classList.toggle('hide', t !== 'sale'); $('gGen').classList.toggle('hide', t === 'cod' || t === 'sale');
-  $('gExp').classList.toggle('hide', t === 'buy'); $('gBuy').classList.toggle('hide', t !== 'buy'); $('gQty').classList.toggle('hide', t !== 'buy');
+  $('gExp').classList.toggle('hide', t === 'buy'); $('gBuy').classList.toggle('hide', t !== 'buy'); $('gQty').classList.toggle('hide', t !== 'buy'); $('gDoc').classList.toggle('hide', t !== 'buy');
   $('lVendor').textContent = t === 'buy' ? 'ซัพพลายเออร์' : 'ผู้ขาย / ร้าน';
   $('lItems').textContent = t === 'buy' ? 'สินค้า (รุ่น/ขนาด)' : 'รายละเอียด';
   if (t === 'buy') $('fBiz').value = 'YANG Haus';
@@ -310,6 +324,7 @@ async function gotPhoto(inp) {
   if (d.total) $('fTotal').value = Number(d.total).toFixed(2);
   $('fVat').checked = !!d.is_tax_invoice;
   if (d.is_goods && type !== 'buy') setType('buy');
+  if (type === 'buy') setDoc(d.doc_type === 'tax_invoice_original' ? 'original' : 'copy');
   if (d.category && cfg && cfg.categories.includes(d.category)) $('fCat').value = d.category;
   catChanged(); vatCalc();
   $('aiBox').className = 'ai good';
@@ -354,7 +369,7 @@ async function save() {
   const body = {
     action: 'save', type, image: imgB64, mime: imgMime,
     date: $('fDate').value, business: $('fBiz').value, vendor: $('fVendor').value.trim(),
-    invoiceNo: $('fInv').value.trim(), taxId: $('fTax').value.trim(), category: $('fCat').value, source: $('fSource').value,
+    invoiceNo: $('fInv').value.trim(), taxId: $('fTax').value.trim(), category: $('fCat').value, source: $('fSource').value, docType: type === 'buy' ? docType : '',
     items: $('fItems').value.trim(), total, qty: $('fQty').value, hasVat: $('fVat').checked,
     shipIn: $('fShip').value, orderRef: $('fOrder').value.trim(), note: $('fNote').value.trim(),
     by: profile ? profile.displayName : ''
@@ -363,8 +378,11 @@ async function save() {
   $('btnSave').disabled = false;
   if (r.dup) return show('⛔ ใบนี้บันทึกไปแล้ว ไม่รับซ้ำ → ' + r.where + '<br><span class="hint">ถ้าเป็นคนละใบจริงๆ ให้ใส่เลขที่ใบเสร็จให้ต่างกัน หรือแก้ในชีทโดยตรง</span>', 'err');
   if (!r.ok) return show('บันทึกไม่สำเร็จ: ' + (r.error || ''), 'err');
-  const lines = [
-    '🧾 จดบัญชีแล้ว → แท็บ ' + r.tab + ' แถว ' + r.row,
+  const lines = r.markedOriginal ? [
+    '✅ ใบกำกับตัวจริง ' + body.invoiceNo + ' → ติ๊ก "ตัวจริงรับแล้ว" ที่แท็บซื้อ แถว ' + r.row + ' (ไม่ลงซ้ำ)',
+    r.photoUrl ? 'รูป: ' + r.photoUrl : ''
+  ] : [
+    '🧾 จดบัญชีแล้ว → แท็บ ' + r.tab + ' แถว ' + r.row + (type === 'buy' && body.hasVat && docType !== 'original' ? ' ⏳ รอใบกำกับตัวจริง' : ''),
     body.date + ' · ' + (body.vendor || '-') + ' (' + body.source + ')',
     body.items,
     'ยอด ' + total.toFixed(2) + (body.hasVat ? ' (VAT ' + r.vat.toFixed(2) + ' เคลมได้)' : ' (ไม่มีใบกำกับ)'),
@@ -471,7 +489,7 @@ function reset() {
    'sCust', 'sPhone', 'sProv', 'sItems', 'sAmount', 'sQty', 'sInvNo', 'sShip', 'sRef', 'sNote'].forEach(i => $(i).value = '');
   $('sPaid').checked = true; $('sInv').value = 'ไม่ออก'; $('sDate').value = today();
   $('cPaid').checked = true; $('cHasVat').checked = false; $('cDate').value = today(); $('cHint').textContent = ''; $('cPaidSum').textContent = '';
-  $('fVat').checked = false; $('fDate').value = today(); if (cfg) $('fSource').value = 'หน้าร้าน'; $('vatCalc').textContent = ''; $('vatNote').classList.add('hide');
+  $('fVat').checked = false; $('fDate').value = today(); if (cfg) $('fSource').value = 'หน้าร้าน'; setDoc('copy'); $('vatCalc').textContent = ''; $('vatNote').classList.add('hide');
   $('s2').classList.add('hide'); $('s3').classList.add('hide'); $('s4').classList.add('hide'); $('s1').classList.remove('hide'); window.scrollTo(0, 0);
 }
 function closeApp() { try { liff.closeWindow(); } catch (e) { window.close(); } }
