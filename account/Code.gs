@@ -320,13 +320,16 @@ function saveCod_(ss, r) {
     if (i >= 0) return { ok: false, dup: true, where: TAB_COD + ' แถว ' + (i + 2) + ' (เลขพัสดุ ' + tracking + ')' };
   }
 
-  // รูป
+  // รูป (1 = ใบปะหน้า, 2 = ใบเสร็จขนส่ง)
   let photoUrl = '';
-  if (r.image) {
+  if (r.image || r.image2) {
     const ym = Utilities.formatDate(d, 'Asia/Bangkok', 'yyyy-MM'), ymd = Utilities.formatDate(d, 'Asia/Bangkok', 'yyyy-MM-dd');
     const folder = getOrCreate_(getOrCreate_(DriveApp.getFolderById(FOLDER_ID), ym), hasVat ? SUB_VAT : SUB_OTHER);
-    const name = ymd + '_COD_' + (r.carrier || '') + '_' + tracking + '.jpg';
-    photoUrl = folder.createFile(Utilities.newBlob(Utilities.base64Decode(r.image), r.mime || 'image/jpeg', name)).getUrl();
+    const base = ymd + '_COD_' + (r.carrier || '') + '_' + tracking;
+    const urls = [];
+    if (r.image) urls.push(folder.createFile(Utilities.newBlob(Utilities.base64Decode(r.image), r.mime || 'image/jpeg', base + '_ใบปะหน้า.jpg')).getUrl());
+    if (r.image2) urls.push(folder.createFile(Utilities.newBlob(Utilities.base64Decode(r.image2), r.mime || 'image/jpeg', base + '_ใบเสร็จขนส่ง.jpg')).getUrl());
+    photoUrl = urls.join(' | ');
   }
   const by = r.by ? 'จดผ่านไลน์: ' + r.by : '';
 

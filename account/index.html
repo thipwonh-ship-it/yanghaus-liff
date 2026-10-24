@@ -85,6 +85,11 @@
         <div><label>วันที่ส่ง</label><input id="cDate" type="date"></div>
         <div><label>ขนส่ง</label><select id="cCarrier" onchange="codCalc()"></select></div>
       </div>
+      <div class="ai" id="c2Box">รูปที่ 1 ควรเป็น <b>ใบปะหน้า</b> (ชื่อ/เบอร์/ยอด COD) · รูปที่ 2 <b>ใบเสร็จขนส่ง</b> (ค่าส่ง/fee) — ถ่ายเพิ่มได้เลย</div>
+      <input id="cam2" type="file" accept="image/*" capture="environment" class="hide" onchange="gotPhoto2(this)">
+      <input id="pick2" type="file" accept="image/*" class="hide" onchange="gotPhoto2(this)">
+      <div class="seg"><button type="button" onclick="cam2.click()">📷 ถ่ายรูปที่ 2</button><button type="button" onclick="pick2.click()">🖼 เลือกรูปที่ 2</button></div>
+      <img id="prev2" class="prev hide" alt="" style="margin-top:8px;max-height:160px">
       <label>เลขพัสดุ</label><input id="cTrack" type="text" placeholder="TH2301… / OT6924638">
       <div class="row">
         <div><label>ลูกค้า (ผู้รับ)</label><input id="cCust" type="text"></div>
@@ -243,6 +248,7 @@ function setDoc(x) {
   $('dCopy').classList.toggle('on', x === 'copy'); $('dOrig').classList.toggle('on', x === 'original');
   $('dHint').textContent = x === 'original' ? 'ถ้าเลขที่ใบกำกับนี้เคยลงไว้แล้ว (จากใบส่งของ) ระบบจะไม่ลงซ้ำ แค่ติ๊ก "ตัวจริงรับแล้ว" + เก็บรูป' : 'ตัวจริงตามมาทีหลัง → ระบบติดสถานะ "รอใบกำกับตัวจริง" พอได้ตัวจริงค่อยถ่ายอีกครั้งด้วยปุ่มนี้';
 }
+let img2B64 = '';
 let type = 'exp', imgB64 = '', imgMime = 'image/jpeg', profile = null, cfg = null, hasAI = true, idToken = '';
 const $ = id => document.getElementById(id);
 
@@ -316,27 +322,7 @@ async function gotPhoto(inp) {
     $('aiBox').textContent = 'AI อ่านให้แล้ว (' + Math.round((d.confidence || 0) * 100) + '%) — เช็คชื่อลูกค้า ยอด สินค้า ก่อนกดบันทึก';
     return;
   }
-  if (type === 'cod') {
-    if (d.date) $('cDate').value = d.date;
-    if (d.carrier && cfg && (cfg.carriers || []).includes(d.carrier)) $('cCarrier').value = d.carrier;
-    else if (d.carrier) { const c = (cfg.carriers || []).find(x => d.carrier.toLowerCase().includes(x.toLowerCase())); if (c) $('cCarrier').value = c; }
-    if (d.tracking) $('cTrack').value = String(d.tracking).replace(/\s/g, '');
-    if (d.customer) $('cCust').value = d.customer;
-    if (d.phone) $('cPhone').value = String(d.phone).replace(/\D/g, '');
-    if (d.province) $('cProv').value = d.province;
-    if (d.items) $('cItems').value = d.items;
-    if (d.cod_amount) $('cCod').value = Number(d.cod_amount).toFixed(2);
-    if (d.freight) $('cFreight').value = Number(d.freight).toFixed(2);
-    if (d.cod_fee) $('cFee').value = Number(d.cod_fee).toFixed(2);
-    if (d.vat) $('cVat').value = Number(d.vat).toFixed(2);
-    if (d.receipt_no) $('cRcpt').value = d.receipt_no;
-    if (d.seller_tax_id) $('cTax').value = String(d.seller_tax_id).replace(/\D/g, '');
-    $('cPaid').checked = !(Number(d.total_paid) === 0 && Number(d.freight) > 0);
-    codCalc(true, true);
-    $('aiBox').className = 'ai good';
-    $('aiBox').textContent = 'AI อ่านให้แล้ว (' + Math.round((d.confidence || 0) * 100) + '%) — เช็คเลขพัสดุ ยอด COD ค่าส่ง ก่อนกดบันทึก';
-    return;
-  }
+  if (type === 'cod') { applyCod(d, false); return; }
   if (d.date) $('fDate').value = d.date;
   if (d.source && cfg && (cfg.sources || []).includes(d.source)) $('fSource').value = d.source;
   if (d.vendor) $('fVendor').value = d.vendor;
@@ -351,6 +337,36 @@ async function gotPhoto(inp) {
   catChanged(); vatCalc();
   $('aiBox').className = 'ai good';
   $('aiBox').textContent = 'AI อ่านให้แล้ว (' + Math.round((d.confidence || 0) * 100) + '%) — เช็คยอดกับใบจริงก่อนกดบันทึก' + (d.doc_type === 'transfer_slip' ? ' · สลิปโอน = หลักฐานจ่าย ไม่ใช่ใบกำกับ กรอก "รายละเอียด" ว่าซื้ออะไรด้วย' : d.is_screenshot || d.doc_type === 'order_screenshot' ? ' · แคปหน้าจอ = ไม่ใช่ใบกำกับ เคลม VAT ไม่ได้ ถ้ามีใบกำกับจากร้านค่อยถ่ายเพิ่ม' : '');
+}
+
+function applyCod(d, onlyEmpty) {
+  const set = (id, v) => { if (v === undefined || v === null || v === '' || v === 0) return; if (onlyEmpty && $(id).value) return; $(id).value = v; };
+  if (d.date) set('cDate', d.date);
+  if (d.carrier && cfg) { const list = cfg.carriers || []; const c = list.includes(d.carrier) ? d.carrier : list.find(x => d.carrier.toLowerCase().includes(x.toLowerCase())); if (c && !(onlyEmpty && $('cCarrier').value !== list[0])) $('cCarrier').value = c; }
+  set('cTrack', d.tracking ? String(d.tracking).replace(/\s/g, '') : '');
+  const junk = /^(cash|เงินสด|โอน|transfer|credit)$/i;
+  if (d.customer && !junk.test(String(d.customer).trim())) set('cCust', d.customer);
+  set('cPhone', d.phone ? String(d.phone).replace(/\D/g, '') : '');
+  set('cProv', d.province); set('cItems', d.items);
+  set('cCod', d.cod_amount ? Number(d.cod_amount).toFixed(2) : '');
+  set('cFreight', d.freight ? Number(d.freight).toFixed(2) : '');
+  set('cFee', d.cod_fee ? Number(d.cod_fee).toFixed(2) : '');
+  set('cVat', d.vat ? Number(d.vat).toFixed(2) : '');
+  set('cRcpt', d.receipt_no); set('cTax', d.seller_tax_id ? String(d.seller_tax_id).replace(/\D/g, '') : '');
+  if (!onlyEmpty) $('cPaid').checked = !(Number(d.total_paid) === 0 && Number(d.freight) > 0);
+  codCalc(true, true);
+  $('aiBox').className = 'ai good';
+  $('aiBox').textContent = 'AI อ่านให้แล้ว (' + Math.round((d.confidence || 0) * 100) + '%) — เช็คเลขพัสดุ ชื่อลูกค้า ยอด COD ค่าส่ง ก่อนกดบันทึก';
+}
+async function gotPhoto2(inp) {
+  const f = inp.files[0]; if (!f) return;
+  inp.value = '';
+  const { b64, url } = await shrink(f, 1600, 0.85);
+  img2B64 = b64; $('prev2').src = url; $('prev2').classList.remove('hide');
+  $('c2Box').innerHTML = '<span class="spin"></span>AI กำลังอ่านรูปที่ 2…';
+  const r = await post({ action: 'read', image: img2B64, mime: imgMime, type: 'cod' });
+  if (r.ok && r.data) { applyCod(r.data, true); $('c2Box').textContent = 'อ่านรูปที่ 2 แล้ว — เติมเฉพาะช่องที่ยังว่าง (ค่าส่ง/fee/เลขที่ใบเสร็จ) เช็คอีกครั้ง'; }
+  else $('c2Box').textContent = 'อ่านรูปที่ 2 ไม่ได้ กรอกค่าส่ง/fee เอง (รูปถูกเก็บให้)';
 }
 
 const COD_FEE_RATE = { 'Flash': 0.025, 'NNP': 0.03 };   // COD fee = % ของยอด COD (NNP เก็บสดนอกใบเสร็จ)
@@ -470,7 +486,7 @@ async function saveCod() {
   $('btnSave').disabled = true; show('<span class="spin"></span>กำลังบันทึก + เก็บรูปลง Drive…', '');
   const freight = Number($('cFreight').value) || 0, fee = Number($('cFee').value) || 0, vat = Number($('cVat').value) || 0;
   const body = {
-    action: 'save', type: 'cod', image: imgB64, mime: imgMime,
+    action: 'save', type: 'cod', image: imgB64, image2: img2B64, mime: imgMime,
     date: $('cDate').value, business: 'YANG Haus', carrier: $('cCarrier').value, tracking, customer: $('cCust').value.trim(),
     channel: $('cChannel').value, items: $('cItems').value.trim(), qty: $('cQty').value, codAmount: cod,
     phone: $('cPhone').value.trim(), province: $('cProv').value.trim(),
@@ -523,7 +539,8 @@ async function savePaid() {
 
 function show(html, cls) { $('msg').innerHTML = '<div class="msg ' + cls + '">' + html + '</div>'; }
 function reset() {
-  imgB64 = ''; ['fVendor', 'fInv', 'fTax', 'fItems', 'fTotal', 'fQty', 'fShip', 'fOrder', 'fNote'].forEach(i => $(i).value = '');
+  imgB64 = ''; img2B64 = ''; $('prev2').classList.add('hide'); $('c2Box').innerHTML = 'รูปที่ 1 ควรเป็น <b>ใบปะหน้า</b> (ชื่อ/เบอร์/ยอด COD) · รูปที่ 2 <b>ใบเสร็จขนส่ง</b> (ค่าส่ง/fee) — ถ่ายเพิ่มได้เลย';
+  ['fVendor', 'fInv', 'fTax', 'fItems', 'fTotal', 'fQty', 'fShip', 'fOrder', 'fNote'].forEach(i => $(i).value = '');
   ['cTrack', 'cCust', 'cPhone', 'cProv', 'cItems', 'cCod', 'cQty', 'cFreight', 'cFee', 'cVat', 'cRcpt', 'cTax', 'cRef', 'cNote',
    'sCust', 'sPhone', 'sProv', 'sItems', 'sAmount', 'sQty', 'sInvNo', 'sShip', 'sRef', 'sNote'].forEach(i => $(i).value = '');
   $('sPaid').checked = true; $('sInv').value = 'ไม่ออก'; $('sDate').value = today();
