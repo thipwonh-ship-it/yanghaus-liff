@@ -20,6 +20,9 @@ const TAB_COD = 'COD';
 const TAB_SALE = 'ขาย';
 const TAB_CFG = 'ตั้งค่า';
 const CAT_SHIP = 'Lalamove/ค่าส่งสินค้า';
+// เบอร์ของเราเอง (บจก.ตามโกล์บ / YANG Haus) — ห้ามถือเป็นเบอร์ลูกค้า
+const OUR_PHONES = ['0811363332', '0811197855', '0811239924'];
+const OUR_NAMES = ['yanghaus', 'yang haus', 'ยางเฮ้าส์', 'ตามโกล์บ', 'tamglobe', 'ทิพย์วรรณ', 'thipwon'];
 const SUB_VAT = 'ภาษีซื้อ';
 const SUB_OTHER = 'ใบเสร็จอื่นๆ';
 
@@ -68,7 +71,8 @@ function readReceipt_(b64, mime, type) {
   const prompt = type === 'sale' ?
     'You are reading, for bookkeeping, evidence of a sale by our shop YANG Haus (ยางเฮ้าส์ / lorcenter): a bank transfer slip received from a customer, a chat screenshot (Facebook/LINE) with an order, or a handwritten/typed bill. Return ONLY JSON with keys:\n' +
     'date (YYYY-MM-DD; Thai year พ.ศ. minus 543; empty if unreadable), ' +
-    'customer (buyer/payer name), phone (buyer phone digits only, empty if none), province (buyer province in Thai, empty if none), ' +
+    'IMPORTANT: our own shop is YANGHAUS / ยางเฮ้าส์ / บริษัท ตามโกล์บ จำกัด (phones 0811363332, 0811197855, 0811239924) — never return us as the customer. The customer is the BUYER/payer/recipient of goods. ' +
+    'customer (buyer/payer name), phone (buyer phone digits only, empty if none or if it is one of our phones), province (buyer province in Thai, empty if none), ' +
     'items (what was sold, short Thai, e.g. ล้อแม็ก KAYS 17 นิ้ว x4), qty (number of pieces if clear, else 0), ' +
     'amount (sale amount paid/agreed, number), ' +
     'ref (transfer reference / slip number / order no if any), ' +
@@ -78,7 +82,8 @@ function readReceipt_(b64, mime, type) {
     'date (YYYY-MM-DD; Thai year พ.ศ. minus 543; empty if unreadable), ' +
     'carrier (best match from: ' + cfg.carriers.join(' | ') + '), ' +
     'tracking (parcel/tracking/waybill number, e.g. TH2301996BHA0G or OT6924638), ' +
-    'customer (consignee/receiver name), phone (receiver phone, digits only, empty if none), province (receiver province in Thai, e.g. พัทลุง, กรุงเทพมหานคร; empty if none), ' +
+    'IMPORTANT: the SENDER/shipper is always our own shop YANGHAUS / ยางเฮ้าส์ / บริษัท ตามโกล์บ จำกัด (phones 0811363332, 0811197855, 0811239924, address 756/199 ถนนมอเตอร์เวย์ ประเวศ กรุงเทพฯ). Never return the sender as customer and never return our phones as phone. The customer is the RECEIVER/consignee (ผู้รับ / To). ' +
+    'customer (receiver/consignee name), phone (receiver phone, digits only, empty if none or if it is one of our phones), province (receiver province in Thai, e.g. พัทลุง, กรุงเทพมหานคร; empty if none), ' +
     'items (goods description, short Thai), ' +
     'cod_amount (amount to collect from receiver; on NNP waybill it is the number in *** after the item e.g. ***3,090; 0 if not COD), ' +
     'freight (shipping fee number), cod_fee (COD service fee number, 0 if none), vat (VAT amount shown, 0 if none), ' +
@@ -303,7 +308,16 @@ function codPaid_(items, by) {
 }
 
 /* COD: 1 ใบ → แถว COD + แถวขาย (ผูกด้วยเลขพัสดุ) + แถวค่าส่งในค่าใช้จ่าย (ถ้าจ่ายต้นทาง) */
+function scrubCustomer_(r) {
+  const ph = String(r.phone || '').replace(/\D/g, '');
+  if (OUR_PHONES.indexOf(ph) >= 0) r.phone = '';
+  const nm = String(r.customer || '').toLowerCase();
+  if (nm && OUR_NAMES.some(x => nm.indexOf(x) >= 0)) r.customer = '';
+  return r;
+}
+
 function saveCod_(ss, r) {
+  scrubCustomer_(r);
   const tracking = String(r.tracking || '').trim();
   if (!tracking) return { ok: false, error: 'ต้องมีเลขพัสดุ' };
   const d = r.date ? new Date(r.date + 'T00:00:00+07:00') : new Date();
@@ -372,6 +386,7 @@ function saveCod_(ss, r) {
 
 /* ขาย (โอน/ขายส่ง/Facebook ที่ไม่ใช่ COD): 1 ใบ → แถวขาย (+ รูปสลิป/แชทใน Drive/ภาษีขาย) */
 function saveSale_(ss, r) {
+  scrubCustomer_(r);
   const d = r.date ? new Date(r.date + 'T00:00:00+07:00') : new Date();
   const amount = Number(r.amount) || 0;
   if (!amount) return { ok: false, error: 'ต้องมียอดขาย' };

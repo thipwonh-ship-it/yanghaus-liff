@@ -249,6 +249,9 @@ function setDoc(x) {
   $('dHint').textContent = x === 'original' ? 'ถ้าเลขที่ใบกำกับนี้เคยลงไว้แล้ว (จากใบส่งของ) ระบบจะไม่ลงซ้ำ แค่ติ๊ก "ตัวจริงรับแล้ว" + เก็บรูป' : 'ตัวจริงตามมาทีหลัง → ระบบติดสถานะ "รอใบกำกับตัวจริง" พอได้ตัวจริงค่อยถ่ายอีกครั้งด้วยปุ่มนี้';
 }
 let img2B64 = '';
+const OUR_PHONES = ['0811363332', '0811197855', '0811239924'];
+const isOurPhone = p => OUR_PHONES.includes(String(p || '').replace(/\D/g, ''));
+const isOurName = n => /yang\s*haus|ยางเฮ้าส์|ตามโกล์บ|tamglobe/i.test(String(n || ''));
 let type = 'exp', imgB64 = '', imgMime = 'image/jpeg', profile = null, cfg = null, hasAI = true, idToken = '';
 const $ = id => document.getElementById(id);
 
@@ -310,8 +313,8 @@ async function gotPhoto(inp) {
   const d = r.data;
   if (type === 'sale') {
     if (d.date) $('sDate').value = d.date;
-    if (d.customer) $('sCust').value = d.customer;
-    if (d.phone) $('sPhone').value = String(d.phone).replace(/\D/g, '');
+    if (d.customer && !isOurName(d.customer)) $('sCust').value = d.customer;
+    if (d.phone && !isOurPhone(d.phone)) $('sPhone').value = String(d.phone).replace(/\D/g, '');
     if (d.province) $('sProv').value = d.province;
     if (d.items) $('sItems').value = d.items;
     if (d.qty) $('sQty').value = d.qty;
@@ -345,8 +348,8 @@ function applyCod(d, onlyEmpty) {
   if (d.carrier && cfg) { const list = cfg.carriers || []; const c = list.includes(d.carrier) ? d.carrier : list.find(x => d.carrier.toLowerCase().includes(x.toLowerCase())); if (c && !(onlyEmpty && $('cCarrier').value !== list[0])) $('cCarrier').value = c; }
   set('cTrack', d.tracking ? String(d.tracking).replace(/\s/g, '') : '');
   const junk = /^(cash|เงินสด|โอน|transfer|credit)$/i;
-  if (d.customer && !junk.test(String(d.customer).trim())) set('cCust', d.customer);
-  set('cPhone', d.phone ? String(d.phone).replace(/\D/g, '') : '');
+  if (d.customer && !junk.test(String(d.customer).trim()) && !isOurName(d.customer)) set('cCust', d.customer);
+  if (d.phone && !isOurPhone(d.phone)) set('cPhone', String(d.phone).replace(/\D/g, ''));
   set('cProv', d.province); set('cItems', d.items);
   set('cCod', d.cod_amount ? Number(d.cod_amount).toFixed(2) : '');
   set('cFreight', d.freight ? Number(d.freight).toFixed(2) : '');
