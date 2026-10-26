@@ -45,7 +45,7 @@
 
 <label>ถ่ายรูปสินค้าแต่ละชิ้น ถ่ายใกล้ๆ ให้ใบปะหน้าเต็มจอ <span style="color:#d32f2f">*บังคับ</span></label>
 <input type="file" id="photo1" accept="image/*" capture="environment" style="display:none">
-<button type="button" class="scanbtn" onclick="document.getElementById('photo1').click()">📸 ถ่ายรูปสินค้า (กดซ้ำทุกชิ้น)</button>
+<button type="button" class="scanbtn" onclick="openCam('photo1')">📸 ถ่ายรูปสินค้า (กดซ้ำทุกชิ้น)</button>
 <div class="photos" id="prev1"></div>
 <div id="filescan" style="display:none"></div>
 <div class="small" id="cnt1"></div>
@@ -65,14 +65,14 @@
 <div id="blockYes" style="display:none">
 <label>ถ่ายสลิป/หน้าจอที่ขนส่งยิงรับของ <span style="color:#d32f2f">*บังคับ</span></label>
 <input type="file" id="photo2" accept="image/*" capture="environment" style="display:none">
-<button type="button" class="scanbtn" onclick="document.getElementById('photo2').click()">📸 ถ่ายสลิปยิงรับ (1 รูปพอ)</button>
+<button type="button" class="scanbtn" onclick="openCam('photo2')">📸 ถ่ายสลิปยิงรับ (1 รูปพอ)</button>
 <div class="photos" id="prev2"></div>
 </div>
 
 <div id="blockNo" style="display:none">
 <label>ถ่ายรูปของทั้งหมดให้เห็นครบ <span id="needCount">…</span> ชิ้น <span style="color:#d32f2f">*บังคับ</span></label>
 <input type="file" id="photo3" accept="image/*" capture="environment" style="display:none">
-<button type="button" class="scanbtn" onclick="document.getElementById('photo3').click()">📸 ถ่ายรูปของทั้งหมด (1 รูปพอ)</button>
+<button type="button" class="scanbtn" onclick="openCam('photo3')">📸 ถ่ายรูปของทั้งหมด (1 รูปพอ)</button>
 <div class="photos" id="prev3"></div>
 <div class="radio"><label><input type="checkbox" id="confirmCount"> ✔ ยืนยันว่าในรูปเห็นครบ <span id="needCount2">…</span> ชิ้น</label></div>
 <label>พนักงานที่รับฝาก (ชื่อ/ลักษณะ) <span style="color:#d32f2f">*บังคับ</span></label>
@@ -143,7 +143,6 @@ function preview(inputId, boxId, arr, cntId){
 }
 
 // ตรวจรูปสินค้า: ต้องอ่านบาร์โค้ดใบปะหน้าจากรูปได้
-let fileScanner=null;
 function loadImg(file){ return new Promise(r=>{ const i=new Image(); i.onload=()=>r(i); i.src=URL.createObjectURL(file); }); }
 function cropBlob(img,x,y,w,h,scale){
   return new Promise(r=>{ const c=document.createElement('canvas'); c.width=w*scale; c.height=h*scale;
@@ -151,9 +150,17 @@ function cropBlob(img,x,y,w,h,scale){
 }
 // JTTH…, TH…, SPXTH…, 7xxxxxx  → เลขพัสดุ; ตัวอื่น (QR ที่มีลิงก์) ตัดทิ้ง
 function looksLikeTracking(t){ return /^[A-Z0-9]{10,25}$/.test(t) && !/^https?:/i.test(t); }
+const nativeBD = ('BarcodeDetector' in window) ? new BarcodeDetector({formats:['code_128','code_39','qr_code']}) : null;
 async function tryDecode(file){
-  fileScanner = fileScanner || new Html5Qrcode('filescan');
-  try{ const r=await fileScanner.scanFileV2(file,false); const t=(r.decodedText||'').trim(); if(looksLikeTracking(t)) return t; }catch(_){}
+  // ก) ตัวอ่านในตัวเครื่อง (iPhone/Android รุ่นใหม่) — เร็ว ไม่ค้าง
+  if(nativeBD){
+    try{ const bmp=await createImageBitmap(file); const codes=await nativeBD.detect(bmp); bmp.close&&bmp.close();
+      for(const c of codes){ const t=(c.rawValue||'').trim(); if(looksLikeTracking(t)) return t; } }catch(_){}
+  }
+  // ข) สำรอง: html5-qrcode สร้างใหม่แล้วทำลายทิ้งทุกครั้ง (กัน iOS ค้างตอนเปิดกล้องซ้ำ)
+  let sc=null;
+  try{ sc=new Html5Qrcode('filescan'); const r=await sc.scanFileV2(file,false); const t=(r.decodedText||'').trim(); if(looksLikeTracking(t)) return t; }catch(_){}
+  finally{ try{ sc&&sc.clear(); }catch(_){} document.getElementById('filescan').innerHTML=''; }
   return null;
 }
 async function checkLabelPhoto(file){
@@ -231,6 +238,10 @@ document.getElementById('carrier').addEventListener('change', e=>{
 });
 fillBranches();
 
+async function openCam(id){
+  if(scanning){ try{ await scanner.stop(); }catch(_){} document.getElementById('scanner').classList.remove('on'); scanning=false; document.getElementById('scanBtn').textContent='📷 อ่านไม่ติด? สแกนบาร์โค้ดด้วยกล้อง'; }
+  document.getElementById(id).click();
+}
 // ===== สแกนบาร์โค้ด =====
 let scanner = null, scanning = false, lastCode = '', lastTime = 0;
 const ta = document.getElementById('tracking');
