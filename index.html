@@ -84,8 +84,12 @@
 
 <div class="small" id="upstat"></div>
 <div class="small" id="gps">📍 กำลังหาตำแหน่ง…</div>
-<button id="send" disabled>บันทึก</button>
-<div id="msg"></div>
+<div style="height:90px"></div>
+<div id="stickybar" style="position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid #ddd;padding:10px 16px;box-shadow:0 -2px 8px rgba(0,0,0,.08)">
+  <div class="small" id="hint" style="margin-bottom:6px">ขั้นต่อไป: ถ่ายรูปสินค้าชิ้นแรก</div>
+  <button id="send" disabled style="margin-top:0">บันทึก</button>
+  <div id="msg" style="margin-top:6px"></div>
+</div>
 
 <script>
 // ===== ตั้งค่า (แก้ 2 บรรทัดนี้) =====
@@ -122,6 +126,8 @@ function preview(inputId, boxId, arr, cntId){
   }
   document.getElementById(inputId).addEventListener('change', async e=>{
     const picked=[...e.target.files]; e.target.value='';
+    document.querySelectorAll('.scanbtn').forEach(b=>b.disabled=true);
+    try{
     for(const f of picked){
       let code='';
       if(inputId==='photo1'){ code = await checkLabelPhoto(f); if(!code) continue; }
@@ -131,6 +137,8 @@ function preview(inputId, boxId, arr, cntId){
       arr.push(f);
     }
     render();
+    }finally{ document.querySelectorAll('.scanbtn').forEach(b=>b.disabled=false); }
+    nextStepHint();
   });
 }
 
@@ -151,23 +159,24 @@ async function tryDecode(file){
 async function checkLabelPhoto(file){
   const msg=document.getElementById('msg');
   msg.textContent='🔍 กำลังตรวจใบปะหน้าในรูป…';
-  let code = await tryDecode(file);                 // 1) รูปเต็มความละเอียดเดิม
-  if(!code){                                        // 2) ซูมเข้าหลายโซน (ใบปะหน้ามักเล็กเมื่อเทียบกับยาง)
-    const img = await loadImg(file); const W=img.naturalWidth, H=img.naturalHeight;
-    const zones=[[0.25,0.25,0.5,0.5],[0.15,0.15,0.7,0.7],[0,0,0.6,0.6],[0.4,0,0.6,0.6],[0,0.4,0.6,0.6],[0.4,0.4,0.6,0.6],[0.2,0.3,0.6,0.4]];
+  const img0 = await loadImg(file);
+  // ย่อรูปต้นฉบับให้กว้างสุด 1600px ก่อน (รูปมือถือ 4000px ทำให้เครื่องช้า/ค้าง)
+  const base = await cropBlob(img0, 0, 0, img0.naturalWidth, img0.naturalHeight, Math.min(1, 1600/img0.naturalWidth));
+  let code = await tryDecode(base);                 // 1) รูปย่อ
+  if(!code){                                        // 2) ซูมเข้า (ใบปะหน้ามักเล็กเมื่อเทียบกับยาง)
+    const img = await loadImg(base); const W=img.naturalWidth, H=img.naturalHeight;
+    const zones=[[0.2,0.2,0.6,0.6],[0,0,0.65,0.65],[0.35,0,0.65,0.65],[0,0.35,0.65,0.65],[0.35,0.35,0.65,0.65]];
+    let n=0;
     for(const [fx,fy,fw,fh] of zones){
-      for(const sc of [2,3]){
-        const crop = await cropBlob(img, W*fx, H*fy, W*fw, H*fh, sc);
-        code = await tryDecode(crop); if(code) break;
-      }
-      if(code) break;
+      n++; msg.textContent=`🔍 กำลังตรวจใบปะหน้า… (${n}/${zones.length})`;
+      const crop = await cropBlob(img, W*fx, H*fy, W*fw, H*fh, 2);
+      code = await tryDecode(crop); if(code) break;
     }
   }
   if(!code){
     if(navigator.vibrate) navigator.vibrate([60,60,60]);
-    msg.textContent='❌ อ่านบาร์โค้ดจากรูปไม่ได้ — ถ่ายใหม่ให้ใบปะหน้าเต็มจอ หรือสแกนด้วยกล้อง';
-    const choice = confirm('อ่านบาร์โค้ดจากรูปไม่ได้\n\nถ่ายใกล้ๆ ให้ใบปะหน้าเต็มจอ แล้วถ่ายใหม่\n\nกด OK = เปิดกล้องสแกนบาร์โค้ดแทน (แล้วค่อยถ่ายรูปซ้ำ)\nกด Cancel = ถ่ายรูปใหม่');
-    if(choice){ document.getElementById('scanBtn').click(); document.getElementById('scanBtn').scrollIntoView({behavior:'smooth'}); }
+    msg.innerHTML='❌ อ่านบาร์โค้ดจากรูปไม่ได้ — <b>ถ่ายใหม่ เข้าใกล้ให้ใบปะหน้าเต็มจอ</b>';
+    document.getElementById('hint').innerHTML='รูปนี้ไม่ถูกเก็บ กดถ่ายรูปสินค้าใหม่ (ถ้ายังไม่ติด ใช้ปุ่มสีเทา "สแกนด้วยกล้อง")';
     return false;
   }
   const list = ta.value.split(/\n/).map(s=>s.trim()).filter(Boolean);
@@ -197,6 +206,8 @@ preview('photo1','prev1',files1,'cnt1'); preview('photo2','prev2',files2); previ
 document.querySelectorAll('input[name=scanned]').forEach(r=>r.addEventListener('change',e=>{
   document.getElementById('blockYes').style.display = e.target.value==='yes'?'block':'none';
   document.getElementById('blockNo').style.display  = e.target.value==='no' ?'block':'none';
+  nextStepHint();
+  (e.target.value==='yes'?document.getElementById('blockYes'):document.getElementById('blockNo')).scrollIntoView({behavior:'smooth',block:'center'});
 }));
 // สาขาประจำของแต่ละขนส่ง (แก้ตรงนี้ถ้าเปลี่ยน)
 const BRANCHES = { 'SPX':['วัดกระทุ่ม'], 'J&T':['74/2'], 'Flash':['หลังโรงไม้'], 'BEST':['รามสอง'] };
@@ -240,7 +251,18 @@ function removeCode(code){
   [...document.getElementById('scanned').children].forEach(ch=>{ if(ch.textContent==='✔ '+code) ch.remove(); });
   updateCounts();
 }
+function nextStepHint(){
+  const n = ta.value.split(/\n/).map(s=>s.trim()).filter(Boolean).length;
+  const sc = document.querySelector('input[name=scanned]:checked');
+  const h = document.getElementById('hint');
+  if(!n) h.textContent='ขั้นต่อไป: ถ่ายรูปสินค้าชิ้นแรก';
+  else if(!sc) h.innerHTML=`อ่านได้ ${n} ชิ้น — มีชิ้นต่อไปกดถ่ายอีก / ครบแล้ว <b>เลื่อนลงตอบ "ยิงรับแล้วหรือยัง"</b>`;
+  else if(sc.value==='yes' && !files2.length) h.textContent='ขั้นต่อไป: ถ่ายสลิปยิงรับ 1 รูป แล้วกดบันทึก';
+  else if(sc.value==='no' && !files3.length) h.textContent=`ขั้นต่อไป: ถ่ายรูปของทั้งหมด ${n} ชิ้น + ชื่อพนักงาน แล้วกดบันทึก`;
+  else h.innerHTML='<b>พร้อมแล้ว กดบันทึก</b>';
+}
 function updateCounts(){
+  nextStepHint();
   const n = ta.value.split(/\n/).map(s=>s.trim()).filter(Boolean).length;
   document.getElementById('trackCount').textContent = n ? `(${n} ชิ้น)` : '';
   document.getElementById('needCount').textContent = n || '…';
