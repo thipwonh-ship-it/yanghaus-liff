@@ -42,6 +42,7 @@ function doPost(e) {
       case 'buyMatch':   return json_(buyMatch_(req));
       case 'codPending': { const u = requireAdmin_(req.idToken); return json_(u.ok ? codPending_() : u); }
       case 'codPaid':    { const u = requireAdmin_(req.idToken); return json_(u.ok ? codPaid_(req.items, u.name) : u); }
+      case 'codList':    { const u = requireAdmin_(req.idToken); return json_(u.ok ? codList_(req.month) : u); }
       default:       return json_({ ok: false, error: 'unknown action' });
     }
   } catch (err) {
@@ -288,6 +289,27 @@ function codPending_() {
   });
   items.sort((a, b) => a.date < b.date ? -1 : 1);
   return { ok: true, items: items, total: items.reduce((t, x) => t + x.cod, 0) };
+}
+
+/* รายการ COD ทั้งหมด (เลือกเดือน yyyy-MM หรือ '' = ทั้งหมด) + รายชื่อเดือนที่มี */
+function codList_(month) {
+  const sh = SpreadsheetApp.openById(SHEET_ID).getSheetByName(TAB_COD);
+  const last = sh.getLastRow();
+  const fmt = (d, p) => d instanceof Date ? Utilities.formatDate(d, 'Asia/Bangkok', p) : '';
+  const items = [], months = {};
+  if (last >= 2) {
+    const v = sh.getRange(2, 1, last - 1, 14).getValues();
+    v.forEach(row => {
+      if (!row[2]) return;
+      const ym = fmt(row[0], 'yyyy-MM'); months[ym] = true;
+      if (month && ym !== month) return;
+      items.push({ date: fmt(row[0], 'd/M'), carrier: row[1], tracking: String(row[2]), customer: row[3], cod: Number(row[5]) || 0,
+        paid: row[11] === true, paidDate: fmt(row[12], 'd/M'), paidAmt: Number(row[13]) || 0, sortKey: fmt(row[0], 'yyyy-MM-dd') });
+    });
+  }
+  items.sort((a, b) => a.sortKey < b.sortKey ? 1 : -1);
+  const total = items.reduce((t, x) => t + x.cod, 0), paid = items.filter(x => x.paid);
+  return { ok: true, items: items, months: Object.keys(months).sort().reverse(), total: total, paidCount: paid.length, paidSum: paid.reduce((t, x) => t + x.paidAmt, 0), pendingSum: items.filter(x => !x.paid).reduce((t, x) => t + x.cod, 0) };
 }
 
 /* ติ๊กเงินเข้า: items = [{row, tracking, amount, date}] */

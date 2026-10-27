@@ -35,6 +35,11 @@
   @keyframes s{to{transform:rotate(360deg)}}
   .sum{font-size:15px;line-height:1.7}
   .sum b{color:var(--navy)}
+  table.cl{width:100%;border-collapse:collapse;font-size:13px}
+  table.cl th{background:#f0e6d8;text-align:left;padding:6px 4px;font-weight:700;white-space:nowrap}
+  table.cl td{padding:6px 4px;border-bottom:1px solid var(--line);vertical-align:top}
+  table.cl td.n{text-align:right;white-space:nowrap}
+  table.cl tr.wait td{background:#fff8e1}
   .pi{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--line)}
   .pi input[type=checkbox]{width:24px;height:24px;flex:none}
   .pi .t{flex:1;font-size:14px;line-height:1.4}.pi .t b{display:block;font-size:15px}
@@ -202,8 +207,16 @@
     <label>วันที่เงินเข้า (ใช้กับทุกชิ้นที่ติ๊ก)</label><input id="pDate" type="date">
     <div class="hint">ติ๊กชิ้นที่ขนส่งโอนมาแล้ว แก้ยอดได้ถ้าโอนมาไม่เท่ายอด COD</div>
     <button class="big" id="btnPaid" onclick="savePaid()">✅ บันทึกเงินเข้า</button>
-    <button class="big alt" onclick="reset()">↩︎ กลับ</button>
     <div id="pMsg"></div>
+  </div>
+  <div class="card">
+    <h2>📋 รายการ COD</h2>
+    <div class="row">
+      <select id="lMonth" onchange="loadList()"><option value="">ทั้งหมด</option></select>
+      <div class="hint" id="lSum" style="flex:2;margin-top:8px"></div>
+    </div>
+    <div id="lList" style="margin-top:8px"></div>
+    <button class="big alt" onclick="reset()">↩︎ กลับ</button>
   </div>
 </section>
 
@@ -519,8 +532,27 @@ async function saveCod() {
 }
 
 let pending = [];
+const thMonth = ym => { const [y, m] = ym.split('-'); return ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'][+m - 1] + ' ' + (+y + 543); };
+let listMonthsLoaded = false;
+async function loadList() {
+  $('lList').innerHTML = '<span class="spin"></span>กำลังโหลด…'; $('lSum').textContent = '';
+  const r = await post({ action: 'codList', month: $('lMonth').value, idToken });
+  if (!r.ok) { $('lList').innerHTML = '<div class="msg err">' + (r.error || 'โหลดไม่ได้') + '</div>'; return; }
+  if (!listMonthsLoaded && r.months) {
+    const cur = $('lMonth').value;
+    $('lMonth').innerHTML = '<option value="">ทั้งหมด</option>' + r.months.map(m => `<option value="${m}">${thMonth(m)}</option>`).join('');
+    if (!cur && r.months.length) { $('lMonth').value = r.months[0]; listMonthsLoaded = true; return loadList(); }
+    $('lMonth').value = cur; listMonthsLoaded = true;
+  }
+  const f = n => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  $('lSum').innerHTML = r.items.length + ' ชิ้น · รวม <b>' + f(r.total) + '</b> · รับแล้ว ' + r.paidCount + ' ชิ้น ' + f(r.paidSum) + (r.pendingSum ? ' · <span style="color:#c62828">ค้าง ' + f(r.pendingSum) + '</span>' : '');
+  if (!r.items.length) { $('lList').innerHTML = '<div class="hint">ไม่มีรายการ</div>'; return; }
+  $('lList').innerHTML = '<table class="cl"><tr><th>วันที่</th><th>เลขที่ COD</th><th>ผู้รับ</th><th style="text-align:right">ยอด</th><th>รับแล้ว</th></tr>' +
+    r.items.map(x => `<tr class="${x.paid ? '' : 'wait'}"><td>${x.date}</td><td>${x.tracking}<br><span class="hint">${x.carrier}</span></td><td>${x.customer || '-'}</td><td class="n">${f(x.cod)}</td><td>${x.paid ? '✅ ' + x.paidDate + (Math.abs(x.paidAmt - x.cod) > 0.01 ? '<br><span class="hint">โอน ' + f(x.paidAmt) + '</span>' : '') : '⏳ รอ'}</td></tr>`).join('') + '</table>';
+}
 async function openPaid() {
   $('s1').classList.add('hide'); $('s4').classList.remove('hide'); window.scrollTo(0, 0);
+  loadList();
   $('pDate').value = today(); $('pMsg').innerHTML = '';
   $('pList').innerHTML = '<span class="spin"></span>กำลังโหลด…';
   const r = await post({ action: 'codPending', idToken });
@@ -537,6 +569,7 @@ async function savePaid() {
   const r = await post({ action: 'codPaid', items, idToken });
   $('btnPaid').disabled = false;
   if (!r.ok) return ($('pMsg').innerHTML = '<div class="msg err">ไม่สำเร็จ: ' + (r.error || '') + '</div>');
+  listMonthsLoaded = false;
   const lines = ['💰 เงิน COD เข้า ' + r.count + ' ชิ้น รวม ' + r.sum.toLocaleString(undefined, { minimumFractionDigits: 2 }) + ' บาท (' + $('pDate').value + ')']
     .concat(items.map(x => '• ' + x.tracking + ' ' + x.amount.toFixed(2)));
   if (r.skipped && r.skipped.length) lines.push('⚠️ ข้าม (แถวในชีทเลื่อน): ' + r.skipped.join(', '));
