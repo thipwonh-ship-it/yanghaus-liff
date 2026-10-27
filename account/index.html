@@ -232,7 +232,7 @@
 
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script>
-const PAGE_VERSION = '2026-10-27b';
+const PAGE_VERSION = '2026-10-27c';
 const LIFF_ID = '2012109669-kGPX1UtI';
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxm5fuyVniisAk14alXdzSMDsvrf_iQ_lI6Ti6hDDPOs--PSsZMVabqC_OwOP7Paa0SWA/exec';
 
@@ -548,26 +548,36 @@ async function saveCod() {
 let pending = [];
 const thMonth = ym => { const [y, m] = ym.split('-'); return ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'][+m - 1] + ' ' + (+y + 543); };
 let listMonthsLoaded = false;
-async function loadList() {
-  $('lList').innerHTML = '<span class="spin"></span>กำลังโหลด…'; $('lSum').textContent = '';
-  const r = await post({ action: 'codList', month: $('lMonth').value, idToken });
-  if (!r.ok) { $('lList').innerHTML = '<div class="msg err">' + (r.error || 'โหลดไม่ได้') + '</div>'; return; }
-  if (!listMonthsLoaded && r.months) {
-    const cur = $('lMonth').value;
-    $('lMonth').innerHTML = '<option value="">ทั้งหมด</option>' + r.months.map(m => `<option value="${m}">${thMonth(m)}</option>`).join('');
-    if (!cur && r.months.length) { $('lMonth').value = r.months[0]; listMonthsLoaded = true; return loadList(); }
-    $('lMonth').value = cur; listMonthsLoaded = true;
-  }
+function renderList(r) {
   const f = n => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  pending = r.items;
   $('lSum').innerHTML = r.items.length + ' ชิ้น · รวม <b>' + f(r.total) + '</b> · รับแล้ว ' + r.paidCount + ' ชิ้น ' + f(r.paidSum) + (r.pendingSum ? ' · <span style="color:#c62828">ค้าง ' + f(r.pendingSum) + '</span>' : '');
   if (!r.items.length) { $('lList').innerHTML = '<div class="hint">ไม่มีรายการ</div>'; return; }
-  pending = r.items;
   $('lList').innerHTML = '<table class="cl"><tr><th></th><th>วันที่</th><th>เลขที่ COD</th><th>ผู้รับ</th><th style="text-align:right">ยอด</th><th>รับแล้ว</th></tr>' +
     r.items.map((x, i) => `<tr class="${x.paid ? '' : 'wait'}"><td>${x.paid ? '' : `<input type="checkbox" id="pc${i}" style="width:22px;height:22px">`}</td><td>${x.date}</td><td>${x.tracking}<br><span class="hint">${x.carrier}</span></td><td>${x.customer || '-'}</td><td class="n">${x.paid ? f(x.cod) : `<input type="number" id="pa${i}" step="0.01" value="${x.cod.toFixed(2)}" style="width:90px;padding:6px;font-size:14px;text-align:right;border:1px solid var(--line);border-radius:6px">`}</td><td>${x.paid ? '✅ ' + x.paidDate + (Math.abs(x.paidAmt - x.cod) > 0.01 ? '<br><span class="hint">โอน ' + f(x.paidAmt) + '</span>' : '') : '⏳ รอ'}</td></tr>`).join('') + '</table>';
+}
+async function loadList() {
+  const month = $('lMonth').value, ck = 'yh_codlist_' + month;
+  let cached = null; try { cached = JSON.parse(localStorage.getItem(ck) || 'null'); } catch (e) {}
+  if (cached) { renderList(cached); $('lSum').innerHTML += ' <span class="spin" style="width:12px;height:12px"></span>'; }
+  else { $('lList').innerHTML = '<span class="spin"></span>กำลังโหลด…'; $('lSum').textContent = ''; }
+  const r = await post({ action: 'codList', month, idToken });
+  if (!r.ok) { if (!cached) $('lList').innerHTML = '<div class="msg err">' + (r.error || 'โหลดไม่ได้') + '</div>'; else $('lSum').innerHTML = $('lSum').innerHTML.replace(/ <span class="spin"[^>]*><\/span>$/, ' (ออฟไลน์)'); return; }
+  try { localStorage.setItem(ck, JSON.stringify(r)); } catch (e) {}
+  if (r.months) { fillMonths(r.months, month); try { localStorage.setItem('yh_cod_months', JSON.stringify(r.months)); } catch (e) {} }
+  if (!listMonthsLoaded && !month && r.months && r.months.length) { listMonthsLoaded = true; $('lMonth').value = r.months[0]; return loadList(); }
+  listMonthsLoaded = true;
+  renderList(r);
+}
+function fillMonths(months, sel) {
+  $('lMonth').innerHTML = '<option value="">ทั้งหมด</option>' + months.map(m => `<option value="${m}">${thMonth(m)}</option>`).join('');
+  $('lMonth').value = months.includes(sel) || sel === '' ? sel : '';
 }
 async function openPaid() {
   $('s1').classList.add('hide'); $('s4').classList.remove('hide'); window.scrollTo(0, 0);
   $('pDate').value = today(); $('pMsg').innerHTML = '';
+  let months = []; try { months = JSON.parse(localStorage.getItem('yh_cod_months') || '[]'); } catch (e) {}
+  if (months.length) { fillMonths(months, months[0]); listMonthsLoaded = true; }
   loadList();
 }
 async function savePaid() {
