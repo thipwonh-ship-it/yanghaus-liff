@@ -232,7 +232,7 @@
 
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script>
-const PAGE_VERSION = '2026-10-27a';
+const PAGE_VERSION = '2026-10-27b';
 const LIFF_ID = '2012109669-kGPX1UtI';
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxm5fuyVniisAk14alXdzSMDsvrf_iQ_lI6Ti6hDDPOs--PSsZMVabqC_OwOP7Paa0SWA/exec';
 
@@ -498,11 +498,26 @@ async function saveSale() {
 }
 
 async function saveCod() {
-  const tracking = $('cTrack').value.trim();
+  const tracking = $('cTrack').value.trim().toUpperCase(); $('cTrack').value = tracking;
   if (!tracking) return show('ใส่เลขพัสดุก่อนค่ะ', 'err');
+  if (!/^[A-Z0-9]{8,}$/.test(tracking)) return show('เลขพัสดุดูไม่ถูก (' + tracking + ') — ตัวอักษร/ตัวเลขล้วน อย่างน้อย 8 ตัว เช่น TH2301996BHA0G, OT6924638', 'err');
+  const carrier = $('cCarrier').value;
+  if (carrier === 'Flash' && !/^TH/.test(tracking)) return show('Flash เลขพัสดุต้องขึ้นต้น TH — เช็คขนส่งหรือเลขอีกที', 'err');
+  if (carrier === 'NNP' && !/^OT/.test(tracking)) return show('NNP เลขพัสดุต้องขึ้นต้น OT — เช็คขนส่งหรือเลขอีกที', 'err');
   if (!$('cDate').value) return show('ใส่วันที่ก่อนค่ะ', 'err');
+  const cust = $('cCust').value.trim();
+  if (!cust) return show('ใส่ชื่อผู้รับก่อนค่ะ (ดูจากใบปะหน้า ช่อง ผู้รับ/To)', 'err');
+  if (/^(cash|เงินสด|โอน|transfer|credit)$/i.test(cust) || isOurName(cust)) return show('ชื่อผู้รับ "' + cust + '" ไม่ใช่ชื่อลูกค้า — ดูช่อง ผู้รับ/To บนใบปะหน้า', 'err');
+  const phoneV = $('cPhone').value.replace(/\D/g, '');
+  if (phoneV && isOurPhone(phoneV)) return show('เบอร์ ' + phoneV + ' เป็นเบอร์ของเราเอง ไม่ใช่ลูกค้า — ลบออกหรือใส่เบอร์ผู้รับ', 'err');
+  if (phoneV && !/^0\d{8,9}$/.test(phoneV)) return show('เบอร์โทรดูไม่ถูก (' + phoneV + ')', 'err');
   const cod = Number($('cCod').value) || 0;
   if (!cod && !confirm('ยอด COD เป็น 0 — พัสดุนี้ไม่ใช่เก็บเงินปลายทางใช่ไหม? (จะลงแค่ค่าส่ง ไม่ลงแถวขาย)')) return;
+  if (cod && (cod < 100 || cod > 200000)) return show('ยอด COD ' + cod.toLocaleString() + ' ดูผิดปกติ — เช็คอีกที', 'err');
+  const fr = Number($('cFreight').value) || 0, fe = Number($('cFee').value) || 0;
+  if ($('cPaid').checked && !fr && !fe && !confirm('ค่าส่ง/ค่าธรรมเนียมเป็น 0 แต่ติ๊กว่าจ่ายสดต้นทาง — ถูกต้องไหม?')) return;
+  const summary = ['ตรวจก่อนบันทึก:', 'ขนส่ง ' + carrier + ' · ' + tracking, 'ผู้รับ ' + cust + (phoneV ? ' ' + phoneV : '') + ($('cProv').value ? ' · ' + $('cProv').value : ''), 'ยอด COD ' + cod.toFixed(2), 'ค่าส่ง ' + fr.toFixed(2) + ' + fee ' + fe.toFixed(2) + ($('cPaid').checked ? ' (จ่ายสด)' : ' (หักจาก COD)'), img2B64 ? 'รูป 2 ใบ' : '⚠️ มีรูปเดียว (ยังไม่ได้ถ่ายใบเสร็จขนส่ง)'].join('\n');
+  if (!confirm(summary + '\n\nถูกต้อง กดตกลงเพื่อบันทึก')) return;
   $('btnSave').disabled = true; show('<span class="spin"></span>กำลังบันทึก + เก็บรูปลง Drive…', '');
   const freight = Number($('cFreight').value) || 0, fee = Number($('cFee').value) || 0, vat = Number($('cVat').value) || 0;
   const body = {
