@@ -248,6 +248,7 @@ function setDoc(x) {
   $('dCopy').classList.toggle('on', x === 'copy'); $('dOrig').classList.toggle('on', x === 'original');
   $('dHint').textContent = x === 'original' ? 'ถ้าเลขที่ใบกำกับนี้เคยลงไว้แล้ว (จากใบส่งของ) ระบบจะไม่ลงซ้ำ แค่ติ๊ก "ตัวจริงรับแล้ว" + เก็บรูป' : 'ตัวจริงตามมาทีหลัง → ระบบติดสถานะ "รอใบกำกับตัวจริง" พอได้ตัวจริงค่อยถ่ายอีกครั้งด้วยปุ่มนี้';
 }
+function showAdmin(on) { $('paidCard').classList.toggle('hide', !on); $('tSale').classList.toggle('hide', !on); }
 let img2B64 = '';
 const OUR_PHONES = ['0811363332', '0811197855', '0811239924'];
 const isOurPhone = p => OUR_PHONES.includes(String(p || '').replace(/\D/g, ''));
@@ -262,10 +263,14 @@ async function init() {
     profile = await liff.getProfile();
     $('who').textContent = profile.displayName;
     idToken = liff.getIDToken() || '';
+    // โชว์ปุ่มผู้ดูแลทันทีจากที่จำไว้ (หลังบ้านยังตรวจสิทธิ์ทุกครั้งตอนบันทึก)
+    const adminKey = 'yh_admin_' + profile.userId;
+    try { if (localStorage.getItem(adminKey) === '1') showAdmin(true); } catch (e) {}
     post({ action: 'whoami', idToken }).then(w => {
       if (!w.ok) return;
       $('whoBox').textContent = w.userId ? 'LINE userId: ' + w.userId + (w.admin ? ' (ผู้ดูแล)' : '') : (w.note || '');
-      if (w.admin) { $('paidCard').classList.remove('hide'); $('tSale').classList.remove('hide'); }
+      showAdmin(!!w.admin);
+      try { localStorage.setItem(adminKey, w.admin ? '1' : '0'); } catch (e) {}
     });
   } catch (e) { $('who').textContent = 'นอก LINE'; }
   try { cfg = JSON.parse(localStorage.getItem('yh_cfg') || 'null'); } catch (e) {}
