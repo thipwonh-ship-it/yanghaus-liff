@@ -65,7 +65,7 @@
     <div class="hint" id="tHint">ค่าแท็กซี่ Lalamove อุปกรณ์ ค่าโฆษณา บิลโทรศัพท์ ฯลฯ</div>
   </div>
   <div class="card hide" style="padding:10px 14px" id="paidCard">
-    <button class="big alt" style="margin:0" onclick="openPaid()">💰 เงิน COD เข้าแล้ว — ติ๊กรายการ</button>
+    <button class="big alt" style="margin:0" onclick="openPaid()">📋 รายการ COD / ติ๊กเงินเข้า</button>
   </div>
   <div class="card">
     <h2>2. ถ่ายรูปใบเสร็จ / ใบกำกับภาษี</h2>
@@ -199,24 +199,20 @@
   </div>
 </section>
 
-<!-- COD เงินเข้า -->
+<!-- COD รายการ + ติ๊กเงินเข้า -->
 <section id="s4" class="hide">
-  <div class="card">
-    <h2>💰 COD ที่ยังไม่ได้เงิน</h2>
-    <div id="pList"><span class="spin"></span>กำลังโหลด…</div>
-    <label>วันที่เงินเข้า (ใช้กับทุกชิ้นที่ติ๊ก)</label><input id="pDate" type="date">
-    <div class="hint">ติ๊กชิ้นที่ขนส่งโอนมาแล้ว แก้ยอดได้ถ้าโอนมาไม่เท่ายอด COD</div>
-    <button class="big" id="btnPaid" onclick="savePaid()">✅ บันทึกเงินเข้า</button>
-    <div id="pMsg"></div>
-  </div>
   <div class="card">
     <h2>📋 รายการ COD</h2>
     <div class="row">
       <select id="lMonth" onchange="loadList()"><option value="">ทั้งหมด</option></select>
       <div class="hint" id="lSum" style="flex:2;margin-top:8px"></div>
     </div>
+    <div class="hint" style="margin-top:6px">แถวเหลือง = ยังไม่ได้เงิน → ติ๊กช่องหน้าแถว (แก้ยอดได้ถ้าโอนมาไม่เท่า) แล้วกดบันทึก</div>
     <div id="lList" style="margin-top:8px"></div>
+    <label>วันที่เงินเข้า (ใช้กับทุกชิ้นที่ติ๊ก)</label><input id="pDate" type="date">
+    <button class="big" id="btnPaid" onclick="savePaid()">✅ บันทึกเงินเข้า</button>
     <button class="big alt" onclick="reset()">↩︎ กลับ</button>
+    <div id="pMsg"></div>
   </div>
 </section>
 
@@ -547,23 +543,17 @@ async function loadList() {
   const f = n => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   $('lSum').innerHTML = r.items.length + ' ชิ้น · รวม <b>' + f(r.total) + '</b> · รับแล้ว ' + r.paidCount + ' ชิ้น ' + f(r.paidSum) + (r.pendingSum ? ' · <span style="color:#c62828">ค้าง ' + f(r.pendingSum) + '</span>' : '');
   if (!r.items.length) { $('lList').innerHTML = '<div class="hint">ไม่มีรายการ</div>'; return; }
-  $('lList').innerHTML = '<table class="cl"><tr><th>วันที่</th><th>เลขที่ COD</th><th>ผู้รับ</th><th style="text-align:right">ยอด</th><th>รับแล้ว</th></tr>' +
-    r.items.map(x => `<tr class="${x.paid ? '' : 'wait'}"><td>${x.date}</td><td>${x.tracking}<br><span class="hint">${x.carrier}</span></td><td>${x.customer || '-'}</td><td class="n">${f(x.cod)}</td><td>${x.paid ? '✅ ' + x.paidDate + (Math.abs(x.paidAmt - x.cod) > 0.01 ? '<br><span class="hint">โอน ' + f(x.paidAmt) + '</span>' : '') : '⏳ รอ'}</td></tr>`).join('') + '</table>';
+  pending = r.items;
+  $('lList').innerHTML = '<table class="cl"><tr><th></th><th>วันที่</th><th>เลขที่ COD</th><th>ผู้รับ</th><th style="text-align:right">ยอด</th><th>รับแล้ว</th></tr>' +
+    r.items.map((x, i) => `<tr class="${x.paid ? '' : 'wait'}"><td>${x.paid ? '' : `<input type="checkbox" id="pc${i}" style="width:22px;height:22px">`}</td><td>${x.date}</td><td>${x.tracking}<br><span class="hint">${x.carrier}</span></td><td>${x.customer || '-'}</td><td class="n">${x.paid ? f(x.cod) : `<input type="number" id="pa${i}" step="0.01" value="${x.cod.toFixed(2)}" style="width:90px;padding:6px;font-size:14px;text-align:right;border:1px solid var(--line);border-radius:6px">`}</td><td>${x.paid ? '✅ ' + x.paidDate + (Math.abs(x.paidAmt - x.cod) > 0.01 ? '<br><span class="hint">โอน ' + f(x.paidAmt) + '</span>' : '') : '⏳ รอ'}</td></tr>`).join('') + '</table>';
 }
 async function openPaid() {
   $('s1').classList.add('hide'); $('s4').classList.remove('hide'); window.scrollTo(0, 0);
-  loadList();
   $('pDate').value = today(); $('pMsg').innerHTML = '';
-  $('pList').innerHTML = '<span class="spin"></span>กำลังโหลด…';
-  const r = await post({ action: 'codPending', idToken });
-  if (!r.ok) { $('pList').innerHTML = '<div class="msg err">โหลดไม่ได้: ' + (r.error || '') + '</div>'; return; }
-  pending = r.items || [];
-  if (!pending.length) { $('pList').innerHTML = '<div class="msg ok">ไม่มี COD ค้างรับ 🎉</div>'; return; }
-  $('pList').innerHTML = '<div class="hint">ค้างรับ ' + pending.length + ' ชิ้น รวม ' + r.total.toLocaleString(undefined, { minimumFractionDigits: 2 }) + ' บาท</div>' +
-    pending.map((x, i) => `<div class="pi"><input type="checkbox" id="pc${i}"><div class="t"><b>${x.tracking} · ${x.carrier}</b>${x.date} · ${x.customer || '-'}${x.items ? ' · ' + x.items : ''}</div><input type="number" id="pa${i}" step="0.01" value="${x.cod.toFixed(2)}"></div>`).join('');
+  loadList();
 }
 async function savePaid() {
-  const items = pending.map((x, i) => $('pc' + i) && $('pc' + i).checked ? { row: x.row, tracking: x.tracking, amount: Number($('pa' + i).value) || 0, date: $('pDate').value } : null).filter(Boolean);
+  const items = pending.map((x, i) => !x.paid && $('pc' + i) && $('pc' + i).checked ? { row: x.row, tracking: x.tracking, amount: Number($('pa' + i).value) || 0, date: $('pDate').value } : null).filter(Boolean);
   if (!items.length) return ($('pMsg').innerHTML = '<div class="msg err">ยังไม่ได้ติ๊กรายการ</div>');
   $('btnPaid').disabled = true; $('pMsg').innerHTML = '<div class="msg"><span class="spin"></span>กำลังบันทึก…</div>';
   const r = await post({ action: 'codPaid', items, idToken });

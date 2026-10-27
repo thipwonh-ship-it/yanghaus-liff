@@ -299,11 +299,11 @@ function codList_(month) {
   const items = [], months = {};
   if (last >= 2) {
     const v = sh.getRange(2, 1, last - 1, 14).getValues();
-    v.forEach(row => {
+    v.forEach((row, i) => {
       if (!row[2]) return;
       const ym = fmt(row[0], 'yyyy-MM'); months[ym] = true;
       if (month && ym !== month) return;
-      items.push({ date: fmt(row[0], 'd/M'), carrier: row[1], tracking: String(row[2]), customer: row[3], cod: Number(row[5]) || 0,
+      items.push({ row: i + 2, date: fmt(row[0], 'd/M'), carrier: row[1], tracking: String(row[2]), customer: row[3], cod: Number(row[5]) || 0,
         paid: row[11] === true, paidDate: fmt(row[12], 'd/M'), paidAmt: Number(row[13]) || 0, sortKey: fmt(row[0], 'yyyy-MM-dd') });
     });
   }

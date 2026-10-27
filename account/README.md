@@ -86,7 +86,7 @@ COD ก็เก็บเบอร์/จังหวัดลง COD!S,T แล
 ### เปิดฟอร์มตรงหน้าที่ต้องการ (ใส่ท้ายลิงก์ LIFF)
 `https://liff.line.me/2012109669-kGPX1UtI?mode=sale` (ขาย) · `?mode=cod` · `?mode=buy` · `?mode=exp` · `?mode=paid` (เงิน COD เข้า) — ใช้ทำปุ่มแยกในริชเมนูได้โดยไม่ต้องสร้าง LIFF ใหม่
 
-### 💰 เงิน COD เข้าแล้ว (ปุ่มในหน้าแรกของฟอร์ม)
+### 📋 รายการ COD / ติ๊กเงินเข้า (ปุ่มในหน้าแรกของฟอร์ม — เดิมชื่อ เงิน COD เข้าแล้ว)
 **เฉพาะผู้ดูแล** (userId ใน Script property `COD_ADMINS`) — ปุ่มโผล่เฉพาะคนที่มีสิทธิ์ และหลังบ้านตรวจ ID token กับ LINE อีกชั้น ปลอมไม่ได้
 ตั้งค่า: Apps Script → Script properties → `LINE_CHANNEL_ID` = Channel ID ของ channel "YH ขนส่ง Login" (developers.line.biz → channel → Basic settings) และ `COD_ADMINS` = userId คั่นด้วย , (ให้แต่ละคนเปิดหน้าฟอร์ม เลื่อนลงล่างสุด จะเห็น "LINE userId: U…")
 ด้านล่างมี **📋 รายการ COD** เลือกเดือน (ค่าเริ่มต้น = เดือนล่าสุด) → ตาราง วันที่ | เลขที่ COD | ผู้รับ | ยอด | รับแล้ว (✅ วันที่ / ⏳ รอ) + สรุป รวม/รับแล้ว/ค้าง (action `codList`, เฉพาะผู้ดูแล)
