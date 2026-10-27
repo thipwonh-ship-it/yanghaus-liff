@@ -59,13 +59,13 @@
       <button id="tBuy" onclick="setType('buy')">🛞 ซื้อของมาขาย</button>
     </div>
     <div class="seg" style="margin-top:8px">
+      <button id="tList" class="hide" onclick="openPaid()">📋 รายการ COD / ติ๊กเงินเข้า</button>
       <button id="tCod" onclick="setType('cod')">📦 ส่ง COD</button>
+    </div>
+    <div class="seg" style="margin-top:8px">
       <button id="tSale" class="hide" onclick="setType('sale')">🧾 ขาย (โอน/ขายส่ง)</button>
     </div>
     <div class="hint" id="tHint">ค่าแท็กซี่ Lalamove อุปกรณ์ ค่าโฆษณา บิลโทรศัพท์ ฯลฯ</div>
-  </div>
-  <div class="card hide" style="padding:10px 14px" id="paidCard">
-    <button class="big alt" style="margin:0" onclick="openPaid()">📋 รายการ COD / ติ๊กเงินเข้า</button>
   </div>
   <div class="card">
     <h2>2. ถ่ายรูปใบเสร็จ / ใบกำกับภาษี</h2>
@@ -257,7 +257,7 @@ function setDoc(x) {
   $('dCopy').classList.toggle('on', x === 'copy'); $('dOrig').classList.toggle('on', x === 'original');
   $('dHint').textContent = x === 'original' ? 'ถ้าเลขที่ใบกำกับนี้เคยลงไว้แล้ว (จากใบส่งของ) ระบบจะไม่ลงซ้ำ แค่ติ๊ก "ตัวจริงรับแล้ว" + เก็บรูป' : 'ตัวจริงตามมาทีหลัง → ระบบติดสถานะ "รอใบกำกับตัวจริง" พอได้ตัวจริงค่อยถ่ายอีกครั้งด้วยปุ่มนี้';
 }
-function showAdmin(on) { $('paidCard').classList.toggle('hide', !on); $('tSale').classList.toggle('hide', !on); }
+function showAdmin(on) { $('tList').classList.toggle('hide', !on); $('tSale').classList.toggle('hide', !on); }
 let img2B64 = '';
 const OUR_PHONES = ['0811363332', '0811197855', '0811239924'];
 const isOurPhone = p => OUR_PHONES.includes(String(p || '').replace(/\D/g, ''));
