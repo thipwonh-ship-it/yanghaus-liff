@@ -227,10 +227,12 @@
 </section>
 
 <div class="hint" id="whoBox" style="text-align:center;margin-top:20px;font-size:11px;color:#999"></div>
+<div class="hint" style="text-align:center;font-size:10px;color:#bbb">เวอร์ชันหน้า: <span id="ver"></span></div>
 </main>
 
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script>
+const PAGE_VERSION = '2026-10-27a';
 const LIFF_ID = '2012109669-kGPX1UtI';
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxm5fuyVniisAk14alXdzSMDsvrf_iQ_lI6Ti6hDDPOs--PSsZMVabqC_OwOP7Paa0SWA/exec';
 
@@ -266,6 +268,7 @@ let type = 'exp', imgB64 = '', imgMime = 'image/jpeg', profile = null, cfg = nul
 const $ = id => document.getElementById(id);
 
 async function init() {
+  $('ver').textContent = PAGE_VERSION;
   try {
     await liff.init({ liffId: LIFF_ID });
     if (!liff.isLoggedIn()) { liff.login(); return; }
