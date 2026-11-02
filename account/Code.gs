@@ -43,6 +43,7 @@ function doPost(e) {
       case 'codPending': { const u = requireAdmin_(req.idToken); return json_(u.ok ? codPending_() : u); }
       case 'codPaid':    { const u = requireAdmin_(req.idToken); return json_(u.ok ? codPaid_(req.items, u.name) : u); }
       case 'codList':    { const u = requireAdmin_(req.idToken); return json_(u.ok ? codList_(req.month) : u); }
+      case 'dash':       { const u = requireAdmin_(req.idToken); return json_(u.ok ? dash_(req.month) : u); }
       default:       return json_({ ok: false, error: 'unknown action' });
     }
   } catch (err) {
@@ -310,6 +311,63 @@ function codList_(month) {
   items.sort((a, b) => a.sortKey < b.sortKey ? 1 : -1);
   const total = items.reduce((t, x) => t + x.cod, 0), paid = items.filter(x => x.paid);
   return { ok: true, items: items, months: Object.keys(months).sort().reverse(), total: total, paidCount: paid.length, paidSum: paid.reduce((t, x) => t + x.paidAmt, 0), pendingSum: items.filter(x => !x.paid).reduce((t, x) => t + x.cod, 0) };
+}
+
+/* ---------- Dashboard รายจ่ายรายเดือน (เฉพาะ COD_ADMINS) — อ่านอย่างเดียว ไม่แก้ชีท ---------- */
+function dash_(month) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const fmt = (d, p) => d instanceof Date ? Utilities.formatDate(d, 'Asia/Bangkok', p) : '';
+  const num = x => Number(x) || 0;
+  const months = {};
+  const now = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM');
+  month = month || now;
+
+  // ซื้อ: A วันที่ C ซัพพลายเออร์ D สินค้า E จำนวน F ยอดรวม G มีใบกำกับ I VAT J เลขใบกำกับ K ขนส่งเข้า M หมายเหตุ N รูป Q ตัวจริงรับแล้ว
+  const buy = { rows: [], total: 0, vat: 0, qty: 0, shipIn: 0, byVendor: {}, pendingOriginal: 0 };
+  const sb = ss.getSheetByName(TAB_BUY);
+  if (sb.getLastRow() >= 2) {
+    sb.getRange(2, 1, sb.getLastRow() - 1, 17).getValues().forEach((r, i) => {
+      if (!r[0] || !num(r[5])) return;
+      const ym = fmt(r[0], 'yyyy-MM'); months[ym] = true;
+      if (ym !== month) return;
+      const waiting = r[6] === true && r[16] !== true;
+      const v = String(r[2] || '(ไม่ระบุ)');
+      buy.rows.push({ row: i + 2, date: fmt(r[0], 'd/M'), vendor: v, items: r[3], qty: num(r[4]), total: num(r[5]), vat: num(r[8]), hasVat: r[6] === true,
+        invNo: String(r[9] || ''), shipIn: num(r[10]), waiting: waiting, photo: String(r[13] || '') });
+      buy.total += num(r[5]); buy.vat += num(r[8]); buy.qty += num(r[4]); buy.shipIn += num(r[10]);
+      buy.byVendor[v] = (buy.byVendor[v] || 0) + num(r[5]);
+      if (waiting) buy.pendingOriginal++;
+    });
+  }
+
+  // ค่าใช้จ่าย: A วันที่ C ประเภท D รายละเอียด E ยอด F มีใบกำกับ H VAT I ผู้ขาย N รูป
+  const exp = { rows: [], total: 0, vat: 0, byCat: {} };
+  const se = ss.getSheetByName(TAB_EXP);
+  if (se.getLastRow() >= 2) {
+    se.getRange(2, 1, se.getLastRow() - 1, 14).getValues().forEach((r, i) => {
+      if (!r[0] || !num(r[4])) return;
+      const ym = fmt(r[0], 'yyyy-MM'); months[ym] = true;
+      if (ym !== month) return;
+      const c = String(r[2] || 'อื่นๆ');
+      exp.rows.push({ row: i + 2, date: fmt(r[0], 'd/M'), cat: c, detail: r[3], total: num(r[4]), vat: num(r[7]), hasVat: r[5] === true, vendor: r[8], photo: String(r[13] || '') });
+      exp.total += num(r[4]); exp.vat += num(r[7]);
+      exp.byCat[c] = (exp.byCat[c] || 0) + num(r[4]);
+    });
+  }
+
+  // COD: ใช้ codList_ (เดือนที่ส่ง) + ค้างรับทั้งหมดทุกเดือน
+  const cod = codList_(month);
+  cod.months.forEach(m => months[m] = true);
+  const pendAll = codPending_();
+
+  const sortRows = a => a.sort((x, y) => x.row < y.row ? 1 : -1);
+  sortRows(buy.rows); sortRows(exp.rows);
+  const top = o => Object.keys(o).map(k => ({ name: k, total: o[k] })).sort((a, b) => b.total - a.total);
+  return { ok: true, month: month, months: Object.keys(months).sort().reverse(),
+    buy: { rows: buy.rows, total: buy.total, vat: buy.vat, qty: buy.qty, shipIn: buy.shipIn, count: buy.rows.length, byVendor: top(buy.byVendor), pendingOriginal: buy.pendingOriginal },
+    exp: { rows: exp.rows, total: exp.total, vat: exp.vat, count: exp.rows.length, byCat: top(exp.byCat) },
+    cod: { items: cod.items, total: cod.total, paidCount: cod.paidCount, paidSum: cod.paidSum, pendingSum: cod.pendingSum, count: cod.items.length,
+      pendingAllSum: pendAll.total || 0, pendingAllCount: (pendAll.items || []).length } };
 }
 
 /* ติ๊กเงินเข้า: items = [{row, tracking, amount, date}] */

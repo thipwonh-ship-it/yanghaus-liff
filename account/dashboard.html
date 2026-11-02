@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f3864">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="YH รายจ่าย">
+<link rel="manifest" href="manifest-dash.json">
+<link rel="apple-touch-icon" href="icon-dash-192.png">
+<title>YANG Haus รายจ่าย</title>
+<style>
+  :root{--navy:#1f3864;--bg:#f4f6fa;--line:#d9dee8;--ok:#1e8e3e;--warn:#b45309;--err:#c62828;--buy:#2c5aa0;--exp:#c2410c;--cod:#6d28d9}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Segoe UI",Roboto,"Noto Sans Thai",sans-serif;background:var(--bg);color:#1a1a1a;font-size:15px;padding-top:env(safe-area-inset-top)}
+  header{background:var(--navy);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;position:sticky;top:0;z-index:5}
+  header b{font-size:17px}
+  header select{padding:8px 10px;font-size:15px;border-radius:8px;border:0;background:#fff;color:var(--navy);font-weight:700;max-width:150px}
+  main{padding:12px 14px 50px;max-width:600px;margin:0 auto}
+  .kpis{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
+  .kpi{background:#fff;border-radius:12px;padding:10px 8px;text-align:center;border-top:4px solid var(--c)}
+  .kpi small{display:block;font-size:11px;color:#666}
+  .kpi b{display:block;font-size:18px;margin-top:2px;color:var(--c);letter-spacing:-.3px}
+  .kpi i{display:block;font-style:normal;font-size:11px;color:#888;margin-top:2px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+  .card h2{font-size:15px;margin:0 0 8px;display:flex;justify-content:space-between;align-items:center;color:var(--c)}
+  .card h2 span{font-size:13px;color:#555;font-weight:400}
+  .bar{margin:6px 0}
+  .bar .l{display:flex;justify-content:space-between;font-size:13px;margin-bottom:2px}
+  .bar .l b{font-weight:600}
+  .bar .t{height:9px;background:#eef1f6;border-radius:5px;overflow:hidden}
+  .bar .f{height:100%;background:var(--c);border-radius:5px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;padding:6px 4px;font-weight:700;color:#555;border-bottom:2px solid var(--line);white-space:nowrap;font-size:12px}
+  td{padding:7px 4px;border-bottom:1px solid #eef1f6;vertical-align:top}
+  td.r,th.r{text-align:right;white-space:nowrap}
+  td.d{color:#777;white-space:nowrap}
+  tr.wait td{background:#fff4e5}
+  tr.pend td{background:#fff9c4}
+  .tag{display:inline-block;font-size:11px;padding:1px 6px;border-radius:6px;background:#eee;color:#555;margin-left:4px}
+  .tag.warn{background:#fdebd0;color:var(--warn)}
+  .tag.ok{background:#e8f5e9;color:var(--ok)}
+  .tag.vat{background:#e3ecfb;color:var(--buy)}
+  .more{display:block;width:100%;padding:10px;border:1px dashed var(--line);background:#fff;border-radius:8px;color:var(--navy);font-size:14px;margin-top:6px}
+  .empty{color:#999;text-align:center;padding:14px;font-size:14px}
+  .alert{background:#fdecea;color:var(--err);padding:10px;border-radius:8px;font-size:14px;margin-bottom:12px}
+  .spin{display:inline-block;width:18px;height:18px;border:3px solid #ccc;border-top-color:var(--navy);border-radius:50%;animation:s .8s linear infinite;vertical-align:middle;margin-right:8px}
+  @keyframes s{to{transform:rotate(360deg)}}
+  .foot{text-align:center;font-size:11px;color:#aaa;margin-top:16px}
+  .foot a{color:var(--navy)}
+  .hide{display:none}
+  a.ph{color:var(--navy);text-decoration:none;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <b>📊 รายจ่าย YANG Haus</b>
+  <select id="month" onchange="load(this.value)"></select>
+</header>
+<main>
+  <div id="status"><span class="spin"></span>กำลังโหลด…</div>
+  <div id="content" class="hide">
+
+    <div class="kpis">
+      <div class="kpi" style="--c:var(--buy)"><small>🛞 ซื้อมาขาย</small><b id="kBuy">0</b><i id="kBuyN"></i></div>
+      <div class="kpi" style="--c:var(--exp)"><small>💸 ค่าใช้จ่าย</small><b id="kExp">0</b><i id="kExpN"></i></div>
+      <div class="kpi" style="--c:var(--cod)"><small>📦 COD ค้างรับ</small><b id="kCod">0</b><i id="kCodN"></i></div>
+    </div>
+
+    <!-- ซื้อมาขาย -->
+    <div class="card" style="--c:var(--buy)">
+      <h2>🛞 สินค้าซื้อมาขาย <span id="bSub"></span></h2>
+      <div id="bAlert" class="alert hide"></div>
+      <div id="bVendors"></div>
+      <table style="margin-top:8px"><thead><tr><th>วันที่</th><th>ซัพพลายเออร์ / สินค้า</th><th class="r">ยอด</th></tr></thead><tbody id="bRows"></tbody></table>
+      <button class="more hide" id="bMore" onclick="showAll('b')">ดูทั้งหมด</button>
+    </div>
+
+    <!-- ค่าใช้จ่าย -->
+    <div class="card" style="--c:var(--exp)">
+      <h2>💸 ค่าใช้จ่าย <span id="eSub"></span></h2>
+      <div id="eCats"></div>
+      <table style="margin-top:8px"><thead><tr><th>วันที่</th><th>ประเภท / รายละเอียด</th><th class="r">ยอด</th></tr></thead><tbody id="eRows"></tbody></table>
+      <button class="more hide" id="eMore" onclick="showAll('e')">ดูทั้งหมด</button>
+    </div>
+
+    <!-- COD -->
+    <div class="card" style="--c:var(--cod)">
+      <h2>📦 COD <span id="cSub"></span></h2>
+      <div id="cAlert" class="alert hide"></div>
+      <div class="bar"><div class="l"><span>เงินเข้าแล้ว <b id="cPaidN"></b></span><b id="cPaid"></b></div><div class="t"><div class="f" id="cPaidBar" style="width:0"></div></div></div>
+      <table style="margin-top:8px"><thead><tr><th>ส่ง</th><th>ลูกค้า / ขนส่ง</th><th class="r">ยอด COD</th><th>เข้า</th></tr></thead><tbody id="cRows"></tbody></table>
+      <button class="more hide" id="cMore" onclick="showAll('c')">ดูทั้งหมด</button>
+    </div>
+
+    <div class="foot">แหล่งข้อมูล: ชีท "YANG Haus บัญชีซื้อ-ขาย 2026" · <a href="index.html">🧾 ไปหน้าจดบัญชี</a> · <a href="#" onclick="load($('month').value);return false">รีเฟรช</a><br>เวอร์ชัน <span id="ver"></span> · <span id="who"></span></div>
+  </div>
+</main>
+
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script>
+const PAGE_VERSION = '2026-11-02a';
+const LIFF_ID = '2012109669-kGPX1UtI';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxm5fuyVniisAk14alXdzSMDsvrf_iQ_lI6Ti6hDDPOs--PSsZMVabqC_OwOP7Paa0SWA/exec';
+const LIMIT = 8;
+const $ = id => document.getElementById(id);
+const fm = n => (Number(n) || 0).toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+const fm2 = n => (Number(n) || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const TH_M = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+const thMonth = ym => { const [y, m] = ym.split('-'); return TH_M[+m - 1] + ' ' + (+y + 543); };
+let idToken = '', data = null;
+
+async function init() {
+  $('ver').textContent = PAGE_VERSION;
+  if ('serviceWorker' in navigator) { try { navigator.serviceWorker.register('sw.js'); } catch (e) {} }
+  try {
+    await liff.init({ liffId: LIFF_ID });
+    if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href.split('#')[0] }); return; }
+    const p = await liff.getProfile(); $('who').textContent = p.displayName;
+    idToken = liff.getIDToken() || '';
+  } catch (e) { $('status').innerHTML = '<div class="alert">เปิดผ่าน LINE ไม่สำเร็จ: ' + esc(e) + '</div>'; return; }
+  // เดือนที่เคยดูล่าสุด
+  let m = ''; try { m = localStorage.getItem('yh_dash_month') || ''; } catch (e) {}
+  const cur = new Date(); const curYm = cur.getFullYear() + '-' + String(cur.getMonth() + 1).padStart(2, '0');
+  load(m && m <= curYm ? m : '');
+}
+
+async function load(month) {
+  $('status').classList.remove('hide'); $('status').innerHTML = '<span class="spin"></span>กำลังโหลด…';
+  const r = await post({ action: 'dash', idToken, month: month || '' });
+  if (!r.ok) { $('status').innerHTML = '<div class="alert">' + esc(r.error || 'โหลดไม่สำเร็จ') + '</div>'; return; }
+  data = r;
+  try { localStorage.setItem('yh_dash_month', r.month); } catch (e) {}
+  // เดือน dropdown
+  const ms = r.months.includes(r.month) ? r.months : [r.month].concat(r.months);
+  $('month').innerHTML = ms.map(x => `<option value="${x}" ${x === r.month ? 'selected' : ''}>${thMonth(x)}</option>`).join('');
+  render();
+  $('status').classList.add('hide'); $('content').classList.remove('hide');
+  window.scrollTo(0, 0);
+}
+
+function render() {
+  const { buy, exp, cod } = data;
+  $('kBuy').textContent = fm(buy.total); $('kBuyN').textContent = buy.count + ' ใบ · ' + fm(buy.qty) + ' เส้น/วง';
+  $('kExp').textContent = fm(exp.total); $('kExpN').textContent = exp.count + ' รายการ';
+  $('kCod').textContent = fm(cod.pendingAllSum); $('kCodN').textContent = cod.pendingAllCount + ' ชิ้น (ทุกเดือน)';
+
+  // ซื้อ
+  $('bSub').textContent = 'VAT ซื้อ ' + fm2(buy.vat) + (buy.shipIn ? ' · ขนส่งเข้า ' + fm(buy.shipIn) : '');
+  $('bAlert').classList.toggle('hide', !buy.pendingOriginal);
+  $('bAlert').textContent = '⚠️ รอใบกำกับตัวจริง ' + buy.pendingOriginal + ' ใบ (แถวสีส้ม) — ต้องเป็น 0 ก่อนยื่น ภ.พ.30';
+  $('bVendors').innerHTML = bars(buy.byVendor, buy.total);
+  rows('b', buy.rows, x => `<tr class="${x.waiting ? 'wait' : ''}"><td class="d">${x.date}</td><td>${esc(x.vendor)}${x.hasVat ? '<span class="tag vat">VAT</span>' : ''}${x.waiting ? '<span class="tag warn">รอตัวจริง</span>' : ''}<br><small style="color:#666">${esc(x.items)}${x.qty ? ' × ' + x.qty : ''}${x.invNo ? ' · ' + esc(x.invNo) : ''}</small>${x.photo ? ` <a class="ph" href="${esc(x.photo)}" target="_blank">📎</a>` : ''}</td><td class="r">${fm2(x.total)}</td></tr>`);
+
+  // ค่าใช้จ่าย
+  $('eSub').textContent = 'VAT ซื้อ ' + fm2(exp.vat);
+  $('eCats').innerHTML = bars(exp.byCat, exp.total);
+  rows('e', exp.rows, x => `<tr><td class="d">${x.date}</td><td>${esc(x.cat)}${x.hasVat ? '<span class="tag vat">VAT</span>' : ''}<br><small style="color:#666">${esc(x.detail)}${x.vendor ? ' · ' + esc(x.vendor) : ''}</small>${x.photo ? ` <a class="ph" href="${esc(x.photo)}" target="_blank">📎</a>` : ''}</td><td class="r">${fm2(x.total)}</td></tr>`);
+
+  // COD
+  $('cSub').textContent = 'ส่งเดือนนี้ ' + cod.count + ' ชิ้น · ' + fm(cod.total) + ' บาท';
+  const pendMonth = cod.items.filter(x => !x.paid).length;
+  $('cAlert').classList.toggle('hide', !pendMonth);
+  $('cAlert').textContent = '⏳ เดือนนี้ยังไม่ได้เงิน ' + pendMonth + ' ชิ้น = ' + fm2(cod.pendingSum) + ' บาท (แถวสีเหลือง)';
+  $('cPaidN').textContent = cod.paidCount + '/' + cod.count + ' ชิ้น';
+  $('cPaid').textContent = fm(cod.paidSum) + ' / ' + fm(cod.total);
+  $('cPaidBar').style.width = (cod.total ? Math.round(cod.paidSum / cod.total * 100) : 0) + '%';
+  rows('c', cod.items, x => `<tr class="${x.paid ? '' : 'pend'}"><td class="d">${x.date}</td><td>${esc(x.customer)}<br><small style="color:#666">${esc(x.carrier)} · ${esc(x.tracking)}</small></td><td class="r">${fm2(x.cod)}</td><td class="d">${x.paid ? '✅ ' + x.paidDate + (Math.abs(x.paidAmt - x.cod) > 0.5 ? '<br><span class="tag warn">' + fm2(x.paidAmt) + '</span>' : '') : '—'}</td></tr>`);
+}
+
+function bars(list, total) {
+  if (!list.length) return '<div class="empty">ยังไม่มีรายการเดือนนี้</div>';
+  return list.slice(0, 8).map(x => `<div class="bar"><div class="l"><span>${esc(x.name)}</span><b>${fm(x.total)}</b></div><div class="t"><div class="f" style="width:${total ? Math.max(2, Math.round(x.total / total * 100)) : 0}%"></div></div></div>`).join('');
+}
+const expanded = {};
+function rows(k, list, tpl) {
+  const all = expanded[k] || list.length <= LIMIT;
+  $(k + 'Rows').innerHTML = list.length ? list.slice(0, all ? undefined : LIMIT).map(tpl).join('') : '<tr><td colspan="4" class="empty">ไม่มีรายการ</td></tr>';
+  $(k + 'More').classList.toggle('hide', all);
+  $(k + 'More').textContent = 'ดูทั้งหมด ' + list.length + ' รายการ';
+}
+function showAll(k) { expanded[k] = true; render(); }
+
+async function post(obj) {
+  try {
+    const r = await fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(obj) });
+    return await r.json();
+  } catch (e) { return { ok: false, error: 'ติดต่อหลังบ้านไม่ได้: ' + e }; }
+}
+init();
+</script>
+</body>
+</html>

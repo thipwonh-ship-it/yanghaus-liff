@@ -2,7 +2,13 @@
 <html lang="th">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f3864">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="YH จดบัญชี">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
 <title>YANG Haus จดบัญชี</title>
 <style>
   :root{--navy:#1f3864;--bg:#f4f6fa;--line:#d9dee8;--ok:#1e8e3e;--warn:#b45309;--err:#c62828}
@@ -64,6 +70,7 @@
     </div>
     <div class="seg" style="margin-top:8px">
       <button id="tSale" class="hide" onclick="setType('sale')">🧾 ขาย (โอน/ขายส่ง)</button>
+      <button id="tDash" class="hide" onclick="location.href='dashboard.html'">📊 รายจ่ายเดือนนี้</button>
     </div>
     <div class="hint" id="tHint">ค่าแท็กซี่ Lalamove อุปกรณ์ ค่าโฆษณา บิลโทรศัพท์ ฯลฯ</div>
   </div>
@@ -232,7 +239,8 @@
 
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script>
-const PAGE_VERSION = '2026-10-27c';
+const PAGE_VERSION = '2026-11-02a';
+if ('serviceWorker' in navigator) { try { navigator.serviceWorker.register('sw.js'); } catch (e) {} }   // PWA: เพิ่มไปหน้าจอหลักได้
 const LIFF_ID = '2012109669-kGPX1UtI';
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxm5fuyVniisAk14alXdzSMDsvrf_iQ_lI6Ti6hDDPOs--PSsZMVabqC_OwOP7Paa0SWA/exec';
 
@@ -259,7 +267,7 @@ function setDoc(x) {
   $('dCopy').classList.toggle('on', x === 'copy'); $('dOrig').classList.toggle('on', x === 'original');
   $('dHint').textContent = x === 'original' ? 'ถ้าเลขที่ใบกำกับนี้เคยลงไว้แล้ว (จากใบส่งของ) ระบบจะไม่ลงซ้ำ แค่ติ๊ก "ตัวจริงรับแล้ว" + เก็บรูป' : 'ตัวจริงตามมาทีหลัง → ระบบติดสถานะ "รอใบกำกับตัวจริง" พอได้ตัวจริงค่อยถ่ายอีกครั้งด้วยปุ่มนี้';
 }
-function showAdmin(on) { $('tList').classList.toggle('hide', !on); $('tSale').classList.toggle('hide', !on); }
+function showAdmin(on) { ['tList', 'tSale', 'tDash'].forEach(id => $(id).classList.toggle('hide', !on)); }
 let img2B64 = '';
 const OUR_PHONES = ['0811363332', '0811197855', '0811239924'];
 const isOurPhone = p => OUR_PHONES.includes(String(p || '').replace(/\D/g, ''));
