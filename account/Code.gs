@@ -51,6 +51,18 @@ function doPost(e) {
   }
 }
 
+
+/* วันที่จากฟอร์ม (yyyy-MM-dd) → Date: ปี พ.ศ. (≥2400) ลบ 543 · ปีเพี้ยน (<2020 หรือ >ปีนี้+1) → ใช้วันนี้ · กันเคส 2483-11-02 */
+function parseDate_(s) {
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(String(s || '').trim());
+  if (!m) return new Date();
+  let y = Number(m[1]); const mo = Number(m[2]), da = Number(m[3]);
+  if (y >= 2400) y -= 543;
+  const thisY = new Date().getFullYear();
+  if (y < 2020 || y > thisY + 1 || mo < 1 || mo > 12 || da < 1 || da > 31) return new Date();
+  return new Date(y + '-' + String(mo).padStart(2, '0') + '-' + String(da).padStart(2, '0') + 'T00:00:00+07:00');
+}
+
 /* ---------- config: รายการ dropdown จากแท็บ ตั้งค่า ---------- */
 function getConfig_() {
   const sh = SpreadsheetApp.openById(SHEET_ID).getSheetByName(TAB_CFG);
@@ -139,7 +151,7 @@ function saveRecord_(r) {
   if (r.type === 'sale') { const u = requireAdmin_(r.idToken); if (!u.ok) return u; return saveSale_(ss, r); }
   const isBuy = r.type === 'buy';
   const sh = ss.getSheetByName(isBuy ? TAB_BUY : TAB_EXP);
-  const d = r.date ? new Date(r.date + 'T00:00:00+07:00') : new Date();
+  const d = parseDate_(r.date);
   const total = Number(r.total) || 0;
   const hasVat = !!r.hasVat;
   const invNo = String(r.invoiceNo || '').trim();
@@ -230,7 +242,7 @@ function buyMatch_(r) {
   if (!rows.length) return { ok: false, error: 'ยังไม่ได้เลือกใบส่งของ' };
   let url = '';
   if (r.image) {
-    const d = r.date ? new Date(r.date + 'T00:00:00+07:00') : new Date();
+    const d = parseDate_(r.date);
     const ym = Utilities.formatDate(d, 'Asia/Bangkok', 'yyyy-MM'), ymd = Utilities.formatDate(d, 'Asia/Bangkok', 'yyyy-MM-dd');
     const folder = getOrCreate_(getOrCreate_(DriveApp.getFolderById(FOLDER_ID), ym), SUB_VAT);
     url = folder.createFile(Utilities.newBlob(Utilities.base64Decode(r.image), r.mime || 'image/jpeg', ymd + '_ต้นฉบับ_' + invNo.replace(/[\\/:*?"<>|]/g, '') + '.jpg')).getUrl();
@@ -324,10 +336,11 @@ function dash_(month) {
 
   // ซื้อ: A วันที่ C ซัพพลายเออร์ D สินค้า E จำนวน F ยอดรวม G มีใบกำกับ I VAT J เลขใบกำกับ K ขนส่งเข้า M หมายเหตุ N รูป Q ตัวจริงรับแล้ว
   const buy = { rows: [], total: 0, vat: 0, qty: 0, shipIn: 0, byVendor: {}, pendingOriginal: 0 };
+  const isYH = b => /yang\s*haus|ยางเฮ้าส์/i.test(String(b || ''));   // dashboard นี้ของ YANG Haus เท่านั้น (ชีทมีธุรกิจอื่นปนอยู่)
   const sb = ss.getSheetByName(TAB_BUY);
   if (sb.getLastRow() >= 2) {
     sb.getRange(2, 1, sb.getLastRow() - 1, 17).getValues().forEach((r, i) => {
-      if (!r[0] || !num(r[5])) return;
+      if (!r[0] || !num(r[5]) || !isYH(r[1])) return;
       const ym = fmt(r[0], 'yyyy-MM'); months[ym] = true;
       if (ym !== month) return;
       const waiting = r[6] === true && r[16] !== true;
@@ -345,7 +358,7 @@ function dash_(month) {
   const se = ss.getSheetByName(TAB_EXP);
   if (se.getLastRow() >= 2) {
     se.getRange(2, 1, se.getLastRow() - 1, 14).getValues().forEach((r, i) => {
-      if (!r[0] || !num(r[4])) return;
+      if (!r[0] || !num(r[4]) || !isYH(r[1])) return;
       const ym = fmt(r[0], 'yyyy-MM'); months[ym] = true;
       if (ym !== month) return;
       if (/^COD\b/.test(String(r[10] || ''))) return;   // แถวค่าส่ง COD ที่ระบบลงเอง → ไปรวมในส่วน "ค่าส่ง+ค่าธรรมเนียม COD" (อ่านจากแท็บ COD) กันนับซ้ำ
@@ -363,7 +376,7 @@ function dash_(month) {
   const si = ss.getSheetByName(TAB_SALE);
   if (si && si.getLastRow() >= 2) {
     si.getRange(2, 1, si.getLastRow() - 1, 20).getValues().forEach((r, i) => {
-      if (!r[0] || !num(r[7])) return;
+      if (!r[0] || !num(r[7]) || !isYH(r[1])) return;
       const ch = String(r[2] || '');
       if (PLATFORM.test(ch)) return;
       const ym = fmt(r[0], 'yyyy-MM'); months[ym] = true;
@@ -444,7 +457,7 @@ function saveCod_(ss, r) {
   scrubCustomer_(r);
   const tracking = String(r.tracking || '').trim();
   if (!tracking) return { ok: false, error: 'ต้องมีเลขพัสดุ' };
-  const d = r.date ? new Date(r.date + 'T00:00:00+07:00') : new Date();
+  const d = parseDate_(r.date);
   const cod = Number(r.codAmount) || 0, freight = Number(r.freight) || 0, codFee = Number(r.codFee) || 0, vat = Number(r.vat) || 0;
   const paidNow = !!r.paidNow;
   const hasVat = !!r.hasVat;
@@ -511,7 +524,7 @@ function saveCod_(ss, r) {
 /* ขาย (โอน/ขายส่ง/Facebook ที่ไม่ใช่ COD): 1 ใบ → แถวขาย (+ รูปสลิป/แชทใน Drive/ภาษีขาย) */
 function saveSale_(ss, r) {
   scrubCustomer_(r);
-  const d = r.date ? new Date(r.date + 'T00:00:00+07:00') : new Date();
+  const d = parseDate_(r.date);
   const amount = Number(r.amount) || 0;
   if (!amount) return { ok: false, error: 'ต้องมียอดขาย' };
   const shS = ss.getSheetByName(TAB_SALE);

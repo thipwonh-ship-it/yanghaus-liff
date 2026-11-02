@@ -239,7 +239,7 @@
 
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script>
-const PAGE_VERSION = '2026-11-02a';
+const PAGE_VERSION = '2026-11-02e';
 if ('serviceWorker' in navigator) { try { navigator.serviceWorker.register('sw.js'); } catch (e) {} }   // PWA: เพิ่มไปหน้าจอหลักได้
 const LIFF_ID = '2012109669-kGPX1UtI';
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxm5fuyVniisAk14alXdzSMDsvrf_iQ_lI6Ti6hDDPOs--PSsZMVabqC_OwOP7Paa0SWA/exec';
@@ -309,6 +309,8 @@ function fillConfig() {
   $('supList').innerHTML = (cfg.suppliers || []).map(s => `<option value="${s}">`).join('');
 }
 function fill(sel, arr, def) { const v = sel.value; sel.innerHTML = (arr || []).map(x => `<option>${x}</option>`).join(''); sel.value = (arr || []).includes(v) ? v : def; }
+// ปี พ.ศ. (2569) → ค.ศ. · ปีเพี้ยน → วันนี้ (เคย AI อ่านเป็น 2483-11-02)
+function fixDate(v) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || ''); if (!m) return today(); let y = +m[1]; if (y >= 2400) y -= 543; const ny = new Date().getFullYear(); if (y < 2020 || y > ny + 1) return today(); return y + '-' + m[2] + '-' + m[3]; }
 function today() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 
 function setType(t) {
@@ -337,7 +339,7 @@ async function gotPhoto(inp) {
   if (!r.ok || r.noai || !r.data) { $('aiBox').innerHTML = 'อ่านอัตโนมัติไม่ได้ กรอกเองได้เลย' + (r.error ? ' (' + r.error + ')' : ''); return; }
   const d = r.data;
   if (type === 'sale') {
-    if (d.date) $('sDate').value = d.date;
+    if (d.date) $('sDate').value = fixDate(d.date);
     if (d.customer && !isOurName(d.customer)) $('sCust').value = d.customer;
     if (d.phone && !isOurPhone(d.phone)) $('sPhone').value = String(d.phone).replace(/\D/g, '');
     if (d.province) $('sProv').value = d.province;
@@ -351,7 +353,7 @@ async function gotPhoto(inp) {
     return;
   }
   if (type === 'cod') { applyCod(d, false); return; }
-  if (d.date) $('fDate').value = d.date;
+  if (d.date) $('fDate').value = fixDate(d.date);
   if (d.source && cfg && (cfg.sources || []).includes(d.source)) $('fSource').value = d.source;
   if (d.vendor) $('fVendor').value = d.vendor;
   if (d.invoice_no) $('fInv').value = d.invoice_no;
@@ -369,7 +371,7 @@ async function gotPhoto(inp) {
 
 function applyCod(d, onlyEmpty) {
   const set = (id, v) => { if (v === undefined || v === null || v === '' || v === 0) return; if (onlyEmpty && $(id).value) return; $(id).value = v; };
-  if (d.date) set('cDate', d.date);
+  if (d.date) set('cDate', fixDate(d.date));
   if (d.carrier && cfg) { const list = cfg.carriers || []; const c = list.includes(d.carrier) ? d.carrier : list.find(x => d.carrier.toLowerCase().includes(x.toLowerCase())); if (c && !(onlyEmpty && $('cCarrier').value !== list[0])) $('cCarrier').value = c; }
   set('cTrack', d.tracking ? String(d.tracking).replace(/\s/g, '') : '');
   const junk = /^(cash|เงินสด|โอน|transfer|credit)$/i;
@@ -451,7 +453,7 @@ async function save() {
   $('btnSave').disabled = true; show('<span class="spin"></span>กำลังบันทึก + เก็บรูปลง Drive…', '');
   const body = {
     action: 'save', type, image: imgB64, mime: imgMime,
-    date: $('fDate').value, business: $('fBiz').value, vendor: $('fVendor').value.trim(),
+    date: fixDate($('fDate').value), business: $('fBiz').value, vendor: $('fVendor').value.trim(),
     invoiceNo: $('fInv').value.trim(), taxId: $('fTax').value.trim(), category: $('fCat').value, source: $('fSource').value, docType: type === 'buy' ? docType : '',
     items: $('fItems').value.trim(), total, qty: $('fQty').value, hasVat: $('fVat').checked,
     shipIn: $('fShip').value, orderRef: $('fOrder').value.trim(), note: $('fNote').value.trim(),
@@ -484,7 +486,7 @@ async function saveSale() {
   $('btnSave').disabled = true; show('<span class="spin"></span>กำลังบันทึก…', '');
   const body = {
     action: 'save', type: 'sale', image: imgB64, mime: imgMime,
-    date: $('sDate').value, business: 'YANG Haus', channel: $('sChannel').value, customer: $('sCust').value.trim(),
+    date: fixDate($('sDate').value), business: 'YANG Haus', channel: $('sChannel').value, customer: $('sCust').value.trim(),
     phone: $('sPhone').value.trim(), province: $('sProv').value.trim(), items: $('sItems').value.trim(), qty: $('sQty').value,
     amount, invoice: $('sInv').value, invoiceNo: $('sInvNo').value.trim(), paid: $('sPaid').checked,
     shipOut: $('sShip').value, ref: $('sRef').value.trim(), note: $('sNote').value.trim(), by: profile ? profile.displayName : '', idToken
@@ -530,7 +532,7 @@ async function saveCod() {
   const freight = Number($('cFreight').value) || 0, fee = Number($('cFee').value) || 0, vat = Number($('cVat').value) || 0;
   const body = {
     action: 'save', type: 'cod', image: imgB64, image2: img2B64, mime: imgMime,
-    date: $('cDate').value, business: 'YANG Haus', carrier: $('cCarrier').value, tracking, customer: $('cCust').value.trim(),
+    date: fixDate($('cDate').value), business: 'YANG Haus', carrier: $('cCarrier').value, tracking, customer: $('cCust').value.trim(),
     channel: $('cChannel').value, items: $('cItems').value.trim(), qty: $('cQty').value, codAmount: cod,
     phone: $('cPhone').value.trim(), province: $('cProv').value.trim(),
     freight, codFee: fee, vat, totalPaid: freight + fee + vat, paidNow: $('cPaid').checked, hasVat: $('cHasVat').checked,
