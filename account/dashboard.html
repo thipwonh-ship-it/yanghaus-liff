@@ -52,7 +52,8 @@
   .tabs button.on{border-color:var(--navy);background:#e8edf7;color:var(--navy)}
   .tabs button.inc.on{border-color:var(--ok);background:#e8f5e9;color:var(--ok)}
   .net{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;font-size:14px}
-  .net b{font-size:18px}
+  .net>b{font-size:18px}
+  .net small b{font-size:12px}
   .foot{text-align:center;font-size:11px;color:#aaa;margin-top:16px}
   .foot a{color:var(--navy)}
   .hide{display:none}
@@ -78,9 +79,9 @@
       <div class="kpis">
         <div class="kpi" style="--c:var(--cod)"><small>📦 ขาย COD</small><b id="iCod">0</b><i id="iCodN"></i></div>
         <div class="kpi" style="--c:var(--buy)"><small>🏪 ขายส่ง</small><b id="iWs">0</b><i id="iWsN"></i></div>
-        <div class="kpi" style="--c:var(--ok)"><small>💬 โอน (FB/LINE)</small><b id="iOther">0</b><i id="iOtherN"></i></div>
+        <div class="kpi" style="--c:var(--warn)"><small>⏳ COD ค้างรับ</small><b id="kCod">0</b><i id="kCodN"></i></div>
       </div>
-      <div class="net"><span>รวมรายรับที่จดผ่านไลน์<br><small style="color:#777">เงินเข้าแล้ว <span id="iPaid"></span></small></span><b style="color:var(--ok)" id="iTotal">0</b></div>
+      <div class="net"><span>รวมรายรับที่จดผ่านไลน์<br><small style="color:#777">COD <b id="iCodT"></b> · ขายส่ง <b id="iWsT"></b> · โอน FB/LINE <b id="iOther"></b><span id="iOtherN" class="hide"></span><br>เงินเข้าแล้ว <span id="iPaid"></span></small></span><b style="color:var(--ok)" id="iTotal">0</b></div>
       <div class="card" style="--c:var(--ok)">
         <h2>ลูกค้าที่ซื้อมากสุด <span id="iSub"></span></h2>
         <div id="iCust"></div>
@@ -90,6 +91,14 @@
         <table><thead><tr><th>วันที่</th><th>ลูกค้า / สินค้า</th><th class="r">ยอด</th><th>เงิน</th></tr></thead><tbody id="iRows"></tbody></table>
         <button class="more hide" id="iMore" onclick="showAll('i')">ดูทั้งหมด</button>
       </div>
+    <!-- COD -->
+    <div class="card" style="--c:var(--cod)">
+      <h2>📦 ติดตามเงิน COD <span id="cSub"></span></h2>
+      <div id="cAlert" class="alert hide"></div>
+      <div class="bar"><div class="l"><span>เงินเข้าแล้ว <b id="cPaidN"></b></span><b id="cPaid"></b></div><div class="t"><div class="f" id="cPaidBar" style="width:0"></div></div></div>
+      <table style="margin-top:8px"><thead><tr><th>ส่ง</th><th>ลูกค้า / ขนส่ง</th><th class="r">ยอด COD</th><th>เข้า</th></tr></thead><tbody id="cRows"></tbody></table>
+      <button class="more hide" id="cMore" onclick="showAll('c')">ดูทั้งหมด</button>
+    </div>
       <div class="hint" style="font-size:12px;color:#888;text-align:center">ไม่รวมยอด Shopee / TikTok / Lazada (ระบบแยก)</div>
     </div>
 
@@ -98,7 +107,7 @@
     <div class="kpis">
       <div class="kpi" style="--c:var(--buy)"><small>🛞 ซื้อมาขาย</small><b id="kBuy">0</b><i id="kBuyN"></i></div>
       <div class="kpi" style="--c:var(--exp)"><small>💸 ค่าใช้จ่าย</small><b id="kExp">0</b><i id="kExpN"></i></div>
-      <div class="kpi" style="--c:var(--cod)"><small>📦 COD ค้างรับ</small><b id="kCod">0</b><i id="kCodN"></i></div>
+      <div class="kpi" style="--c:var(--cod)"><small>📦 ค่าส่ง+fee COD</small><b id="kCodX">0</b><i id="kCodXN"></i></div>
     </div>
 
     <!-- ซื้อมาขาย -->
@@ -118,13 +127,13 @@
       <button class="more hide" id="eMore" onclick="showAll('e')">ดูทั้งหมด</button>
     </div>
 
-    <!-- COD -->
+    <!-- ค่าส่ง + ค่าธรรมเนียม COD (รายจ่าย) -->
     <div class="card" style="--c:var(--cod)">
-      <h2>📦 COD <span id="cSub"></span></h2>
-      <div id="cAlert" class="alert hide"></div>
-      <div class="bar"><div class="l"><span>เงินเข้าแล้ว <b id="cPaidN"></b></span><b id="cPaid"></b></div><div class="t"><div class="f" id="cPaidBar" style="width:0"></div></div></div>
-      <table style="margin-top:8px"><thead><tr><th>ส่ง</th><th>ลูกค้า / ขนส่ง</th><th class="r">ยอด COD</th><th>เข้า</th></tr></thead><tbody id="cRows"></tbody></table>
-      <button class="more hide" id="cMore" onclick="showAll('c')">ดูทั้งหมด</button>
+      <h2>📦 ค่าส่ง + ค่าธรรมเนียม COD <span id="xSub"></span></h2>
+      <div class="hint" id="xHint" style="margin:0 0 8px"></div>
+      <div id="xCarrier"></div>
+      <table style="margin-top:8px"><thead><tr><th>วันที่</th><th>ลูกค้า / ขนส่ง</th><th class="r">ค่าส่ง</th><th class="r">fee+VAT</th><th class="r">รวม</th></tr></thead><tbody id="xRows"></tbody></table>
+      <button class="more hide" id="xMore" onclick="showAll('x')">ดูทั้งหมด</button>
     </div>
     </div><!-- /vExp -->
 
@@ -134,7 +143,7 @@
 
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script>
-const PAGE_VERSION = '2026-11-02b';
+const PAGE_VERSION = '2026-11-02c';
 let view = 'exp';
 function setView(v) {
   view = v;
@@ -186,14 +195,14 @@ async function load(month) {
 
 const G_LABEL = { cod: '📦 COD', ws: '🏪 ขายส่ง', other: '💬 โอน' };
 function render() {
-  const { buy, exp, cod, inc } = data;
+  const { buy, exp, cod, inc, codCost } = data;
 
   // รายรับ
   if (inc) {
     const g = inc.groups;
     $('iCod').textContent = fm(g.cod.total); $('iCodN').textContent = g.cod.count + ' รายการ · เข้าแล้ว ' + fm(g.cod.paid);
     $('iWs').textContent = fm(g.ws.total); $('iWsN').textContent = g.ws.count + ' รายการ · เข้าแล้ว ' + fm(g.ws.paid);
-    $('iOther').textContent = fm(g.other.total); $('iOtherN').textContent = g.other.count + ' รายการ · เข้าแล้ว ' + fm(g.other.paid);
+    $('iCodT').textContent = fm(g.cod.total); $('iWsT').textContent = fm(g.ws.total); $('iOther').textContent = fm(g.other.total);
     $('iTotal').textContent = fm(inc.total); $('iPaid').textContent = fm(inc.paid) + ' / ค้าง ' + fm(inc.total - inc.paid);
     $('iSub').textContent = inc.count + ' รายการ · ' + fm(inc.qty) + ' เส้น/วง';
     $('iCust').innerHTML = bars(inc.byCustomer, inc.total);
@@ -202,6 +211,13 @@ function render() {
   $('kBuy').textContent = fm(buy.total); $('kBuyN').textContent = buy.count + ' ใบ · ' + fm(buy.qty) + ' เส้น/วง';
   $('kExp').textContent = fm(exp.total); $('kExpN').textContent = exp.count + ' รายการ';
   $('kCod').textContent = fm(cod.pendingAllSum); $('kCodN').textContent = cod.pendingAllCount + ' ชิ้น (ทุกเดือน)';
+  if (codCost) {
+    $('kCodX').textContent = fm(codCost.total); $('kCodXN').textContent = codCost.count + ' ชิ้น';
+    $('xSub').textContent = 'ค่าส่ง ' + fm(codCost.freight) + ' · fee ' + fm(codCost.fee) + (codCost.vat ? ' · VAT ' + fm(codCost.vat) : '');
+    $('xHint').textContent = 'จ่ายสดต้นทาง ' + fm(codCost.paidNow) + ' บาท · ขนส่งหักจากยอด COD ' + fm(codCost.deducted) + ' บาท (รายจ่ายจริงทั้งคู่)';
+    $('xCarrier').innerHTML = bars(codCost.byCarrier, codCost.total);
+    rows('x', codCost.rows, x => `<tr><td class="d">${x.date}</td><td>${esc(x.customer)}<br><small style="color:#666">${esc(x.carrier)} · ${esc(x.tracking)}${x.upfront ? '' : ' · <span class="tag">หักจาก COD</span>'}</small></td><td class="r">${fm2(x.freight)}</td><td class="r">${fm2(x.fee + x.vat)}</td><td class="r"><b>${fm2(x.total)}</b></td></tr>`);
+  }
 
   // ซื้อ
   $('bSub').textContent = 'VAT ซื้อ ' + fm2(buy.vat) + (buy.shipIn ? ' · ขนส่งเข้า ' + fm(buy.shipIn) : '');

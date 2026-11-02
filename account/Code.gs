@@ -348,6 +348,7 @@ function dash_(month) {
       if (!r[0] || !num(r[4])) return;
       const ym = fmt(r[0], 'yyyy-MM'); months[ym] = true;
       if (ym !== month) return;
+      if (/^COD\b/.test(String(r[10] || ''))) return;   // แถวค่าส่ง COD ที่ระบบลงเอง → ไปรวมในส่วน "ค่าส่ง+ค่าธรรมเนียม COD" (อ่านจากแท็บ COD) กันนับซ้ำ
       const c = String(r[2] || 'อื่นๆ');
       exp.rows.push({ row: i + 2, date: fmt(r[0], 'd/M'), cat: c, detail: r[3], total: num(r[4]), vat: num(r[7]), hasVat: r[5] === true, vendor: r[8], photo: String(r[13] || '') });
       exp.total += num(r[4]); exp.vat += num(r[7]);
@@ -383,13 +384,32 @@ function dash_(month) {
   cod.months.forEach(m => months[m] = true);
   const pendAll = codPending_();
 
+  // ค่าส่ง + ค่าธรรมเนียม COD (รายจ่าย) จากแท็บ COD: A วันที่ B ขนส่ง C เลขพัสดุ D ลูกค้า G ค่าส่ง H COD fee I VAT Q หมายเหตุ (จ่ายต้นทาง / ขนส่งหัก)
+  const codCost = { rows: [], freight: 0, fee: 0, vat: 0, total: 0, paidNow: 0, deducted: 0, byCarrier: {} };
+  const sc = ss.getSheetByName(TAB_COD);
+  if (sc.getLastRow() >= 2) {
+    sc.getRange(2, 1, sc.getLastRow() - 1, 17).getValues().forEach((r, i) => {
+      if (!r[0] || !r[2]) return;
+      if (fmt(r[0], 'yyyy-MM') !== month) return;
+      const f = num(r[6]), fee = num(r[7]), v = num(r[8]), t = f + fee + v;
+      if (!t) return;
+      const upfront = /จ่ายค่าส่งต้นทาง/.test(String(r[16] || ''));
+      const car = String(r[1] || '(ไม่ระบุ)');
+      codCost.rows.push({ row: i + 2, date: fmt(r[0], 'd/M'), carrier: car, tracking: String(r[2]), customer: r[3], freight: f, fee: fee, vat: v, total: t, upfront: upfront });
+      codCost.freight += f; codCost.fee += fee; codCost.vat += v; codCost.total += t;
+      if (upfront) codCost.paidNow += t; else codCost.deducted += t;
+      codCost.byCarrier[car] = (codCost.byCarrier[car] || 0) + t;
+    });
+  }
+
   const sortRows = a => a.sort((x, y) => x.row < y.row ? 1 : -1);
-  sortRows(buy.rows); sortRows(exp.rows); sortRows(inc.rows);
+  sortRows(buy.rows); sortRows(exp.rows); sortRows(inc.rows); sortRows(codCost.rows);
   const top = o => Object.keys(o).map(k => ({ name: k, total: o[k] })).sort((a, b) => b.total - a.total);
   return { ok: true, month: month, months: Object.keys(months).sort().reverse(),
     inc: { rows: inc.rows, total: inc.total, paid: inc.paid, qty: inc.qty, count: inc.rows.length, groups: inc.groups, byCustomer: top(inc.byCustomer).slice(0, 8) },
     buy: { rows: buy.rows, total: buy.total, vat: buy.vat, qty: buy.qty, shipIn: buy.shipIn, count: buy.rows.length, byVendor: top(buy.byVendor), pendingOriginal: buy.pendingOriginal },
     exp: { rows: exp.rows, total: exp.total, vat: exp.vat, count: exp.rows.length, byCat: top(exp.byCat) },
+    codCost: { rows: codCost.rows, freight: codCost.freight, fee: codCost.fee, vat: codCost.vat, total: codCost.total, paidNow: codCost.paidNow, deducted: codCost.deducted, count: codCost.rows.length, byCarrier: top(codCost.byCarrier) },
     cod: { items: cod.items, total: cod.total, paidCount: cod.paidCount, paidSum: cod.paidSum, pendingSum: cod.pendingSum, count: cod.items.length,
       pendingAllSum: pendAll.total || 0, pendingAllCount: (pendAll.items || []).length } };
 }
