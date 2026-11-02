@@ -1,6 +1,6 @@
 {
-  "name": "YANG Haus รายจ่าย",
-  "short_name": "YH รายจ่าย",
+  "name": "YANG Haus รายรับ-รายจ่าย",
+  "short_name": "YH แดชบอร์ด",
   "start_url": "./dashboard.html",
   "scope": "./",
   "display": "standalone",

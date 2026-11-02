@@ -355,15 +355,39 @@ function dash_(month) {
     });
   }
 
+  // รายรับที่จดผ่านไลน์ (แท็บ ขาย): A วันที่ C ช่องทาง D เลขออเดอร์ E ลูกค้า F สินค้า G จำนวน H ยอด M เงินเข้าจริง S รับเงินแล้ว T หมายเหตุ
+  // แยก 3 กลุ่ม: cod (หมายเหตุขึ้นต้น COD) / ws (ช่องทาง ขายส่ง) / other (Facebook/LINE โอน) — ไม่นับแพลตฟอร์ม (Shopee/TikTok/Lazada ลงวันที่ 7 เป็นระบบแยก)
+  const PLATFORM = /shopee|tiktok|lazada/i;
+  const inc = { rows: [], total: 0, paid: 0, qty: 0, groups: { cod: { total: 0, paid: 0, count: 0 }, ws: { total: 0, paid: 0, count: 0 }, other: { total: 0, paid: 0, count: 0 } }, byCustomer: {} };
+  const si = ss.getSheetByName(TAB_SALE);
+  if (si && si.getLastRow() >= 2) {
+    si.getRange(2, 1, si.getLastRow() - 1, 20).getValues().forEach((r, i) => {
+      if (!r[0] || !num(r[7])) return;
+      const ch = String(r[2] || '');
+      if (PLATFORM.test(ch)) return;
+      const ym = fmt(r[0], 'yyyy-MM'); months[ym] = true;
+      if (ym !== month) return;
+      const note = String(r[19] || '');
+      const g = /^COD\b/i.test(note) ? 'cod' : /ขายส่ง/.test(ch) ? 'ws' : 'other';
+      const paid = r[18] === true, amt = num(r[7]), got = num(r[12]);
+      const cust = String(r[4] || '(ไม่ระบุ)');
+      inc.rows.push({ row: i + 2, date: fmt(r[0], 'd/M'), group: g, channel: ch, ref: String(r[3] || ''), customer: cust, items: r[5], qty: num(r[6]), amount: amt, paid: paid, got: got });
+      inc.total += amt; inc.qty += num(r[6]); if (paid) inc.paid += (got || amt);
+      inc.groups[g].total += amt; inc.groups[g].count++; if (paid) inc.groups[g].paid += (got || amt);
+      inc.byCustomer[cust] = (inc.byCustomer[cust] || 0) + amt;
+    });
+  }
+
   // COD: ใช้ codList_ (เดือนที่ส่ง) + ค้างรับทั้งหมดทุกเดือน
   const cod = codList_(month);
   cod.months.forEach(m => months[m] = true);
   const pendAll = codPending_();
 
   const sortRows = a => a.sort((x, y) => x.row < y.row ? 1 : -1);
-  sortRows(buy.rows); sortRows(exp.rows);
+  sortRows(buy.rows); sortRows(exp.rows); sortRows(inc.rows);
   const top = o => Object.keys(o).map(k => ({ name: k, total: o[k] })).sort((a, b) => b.total - a.total);
   return { ok: true, month: month, months: Object.keys(months).sort().reverse(),
+    inc: { rows: inc.rows, total: inc.total, paid: inc.paid, qty: inc.qty, count: inc.rows.length, groups: inc.groups, byCustomer: top(inc.byCustomer).slice(0, 8) },
     buy: { rows: buy.rows, total: buy.total, vat: buy.vat, qty: buy.qty, shipIn: buy.shipIn, count: buy.rows.length, byVendor: top(buy.byVendor), pendingOriginal: buy.pendingOriginal },
     exp: { rows: exp.rows, total: exp.total, vat: exp.vat, count: exp.rows.length, byCat: top(exp.byCat) },
     cod: { items: cod.items, total: cod.total, paidCount: cod.paidCount, paidSum: cod.paidSum, pendingSum: cod.pendingSum, count: cod.items.length,

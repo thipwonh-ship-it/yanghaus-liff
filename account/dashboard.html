@@ -6,10 +6,10 @@
 <meta name="theme-color" content="#1f3864">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="YH รายจ่าย">
+<meta name="apple-mobile-web-app-title" content="YH แดชบอร์ด">
 <link rel="manifest" href="manifest-dash.json">
 <link rel="apple-touch-icon" href="icon-dash-192.png">
-<title>YANG Haus รายจ่าย</title>
+<title>YANG Haus รายรับ-รายจ่าย</title>
 <style>
   :root{--navy:#1f3864;--bg:#f4f6fa;--line:#d9dee8;--ok:#1e8e3e;--warn:#b45309;--err:#c62828;--buy:#2c5aa0;--exp:#c2410c;--cod:#6d28d9}
   *{box-sizing:border-box}
@@ -47,6 +47,12 @@
   .alert{background:#fdecea;color:var(--err);padding:10px;border-radius:8px;font-size:14px;margin-bottom:12px}
   .spin{display:inline-block;width:18px;height:18px;border:3px solid #ccc;border-top-color:var(--navy);border-radius:50%;animation:s .8s linear infinite;vertical-align:middle;margin-right:8px}
   @keyframes s{to{transform:rotate(360deg)}}
+  .tabs{display:flex;gap:8px;margin-bottom:12px}
+  .tabs button{flex:1;padding:12px 4px;font-size:15px;font-weight:700;border:2px solid var(--line);background:#fff;border-radius:10px;color:#555}
+  .tabs button.on{border-color:var(--navy);background:#e8edf7;color:var(--navy)}
+  .tabs button.inc.on{border-color:var(--ok);background:#e8f5e9;color:var(--ok)}
+  .net{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;font-size:14px}
+  .net b{font-size:18px}
   .foot{text-align:center;font-size:11px;color:#aaa;margin-top:16px}
   .foot a{color:var(--navy)}
   .hide{display:none}
@@ -55,13 +61,40 @@
 </head>
 <body>
 <header>
-  <b>📊 รายจ่าย YANG Haus</b>
+  <b>📊 YANG Haus</b>
   <select id="month" onchange="load(this.value)"></select>
 </header>
 <main>
   <div id="status"><span class="spin"></span>กำลังโหลด…</div>
   <div id="content" class="hide">
 
+    <div class="tabs">
+      <button id="tabExp" class="on" onclick="setView('exp')">💸 รายจ่าย</button>
+      <button id="tabInc" class="inc" onclick="setView('inc')">💰 รายรับ</button>
+    </div>
+
+    <!-- ===== รายรับ ===== -->
+    <div id="vInc" class="hide">
+      <div class="kpis">
+        <div class="kpi" style="--c:var(--cod)"><small>📦 ขาย COD</small><b id="iCod">0</b><i id="iCodN"></i></div>
+        <div class="kpi" style="--c:var(--buy)"><small>🏪 ขายส่ง</small><b id="iWs">0</b><i id="iWsN"></i></div>
+        <div class="kpi" style="--c:var(--ok)"><small>💬 โอน (FB/LINE)</small><b id="iOther">0</b><i id="iOtherN"></i></div>
+      </div>
+      <div class="net"><span>รวมรายรับที่จดผ่านไลน์<br><small style="color:#777">เงินเข้าแล้ว <span id="iPaid"></span></small></span><b style="color:var(--ok)" id="iTotal">0</b></div>
+      <div class="card" style="--c:var(--ok)">
+        <h2>ลูกค้าที่ซื้อมากสุด <span id="iSub"></span></h2>
+        <div id="iCust"></div>
+      </div>
+      <div class="card" style="--c:var(--ok)">
+        <h2>รายการขาย</h2>
+        <table><thead><tr><th>วันที่</th><th>ลูกค้า / สินค้า</th><th class="r">ยอด</th><th>เงิน</th></tr></thead><tbody id="iRows"></tbody></table>
+        <button class="more hide" id="iMore" onclick="showAll('i')">ดูทั้งหมด</button>
+      </div>
+      <div class="hint" style="font-size:12px;color:#888;text-align:center">ไม่รวมยอด Shopee / TikTok / Lazada (ระบบแยก)</div>
+    </div>
+
+    <!-- ===== รายจ่าย ===== -->
+    <div id="vExp">
     <div class="kpis">
       <div class="kpi" style="--c:var(--buy)"><small>🛞 ซื้อมาขาย</small><b id="kBuy">0</b><i id="kBuyN"></i></div>
       <div class="kpi" style="--c:var(--exp)"><small>💸 ค่าใช้จ่าย</small><b id="kExp">0</b><i id="kExpN"></i></div>
@@ -93,6 +126,7 @@
       <table style="margin-top:8px"><thead><tr><th>ส่ง</th><th>ลูกค้า / ขนส่ง</th><th class="r">ยอด COD</th><th>เข้า</th></tr></thead><tbody id="cRows"></tbody></table>
       <button class="more hide" id="cMore" onclick="showAll('c')">ดูทั้งหมด</button>
     </div>
+    </div><!-- /vExp -->
 
     <div class="foot">แหล่งข้อมูล: ชีท "YANG Haus บัญชีซื้อ-ขาย 2026" · <a href="index.html">🧾 ไปหน้าจดบัญชี</a> · <a href="#" onclick="load($('month').value);return false">รีเฟรช</a><br>เวอร์ชัน <span id="ver"></span> · <span id="who"></span></div>
   </div>
@@ -100,7 +134,15 @@
 
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script>
-const PAGE_VERSION = '2026-11-02a';
+const PAGE_VERSION = '2026-11-02b';
+let view = 'exp';
+function setView(v) {
+  view = v;
+  $('tabExp').classList.toggle('on', v === 'exp'); $('tabInc').classList.toggle('on', v === 'inc');
+  $('vExp').classList.toggle('hide', v !== 'exp'); $('vInc').classList.toggle('hide', v !== 'inc');
+  try { localStorage.setItem('yh_dash_view', v); } catch (e) {}
+  window.scrollTo(0, 0);
+}
 const LIFF_ID = '2012109669-kGPX1UtI';
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxm5fuyVniisAk14alXdzSMDsvrf_iQ_lI6Ti6hDDPOs--PSsZMVabqC_OwOP7Paa0SWA/exec';
 const LIMIT = 8;
@@ -122,7 +164,8 @@ async function init() {
     idToken = liff.getIDToken() || '';
   } catch (e) { $('status').innerHTML = '<div class="alert">เปิดผ่าน LINE ไม่สำเร็จ: ' + esc(e) + '</div>'; return; }
   // เดือนที่เคยดูล่าสุด
-  let m = ''; try { m = localStorage.getItem('yh_dash_month') || ''; } catch (e) {}
+  let m = ''; try { m = localStorage.getItem('yh_dash_month') || ''; setView(localStorage.getItem('yh_dash_view') === 'inc' ? 'inc' : 'exp'); } catch (e) {}
+  const qv = new URLSearchParams(location.search).get('view'); if (qv === 'inc' || qv === 'exp') setView(qv);
   const cur = new Date(); const curYm = cur.getFullYear() + '-' + String(cur.getMonth() + 1).padStart(2, '0');
   load(m && m <= curYm ? m : '');
 }
@@ -141,8 +184,21 @@ async function load(month) {
   window.scrollTo(0, 0);
 }
 
+const G_LABEL = { cod: '📦 COD', ws: '🏪 ขายส่ง', other: '💬 โอน' };
 function render() {
-  const { buy, exp, cod } = data;
+  const { buy, exp, cod, inc } = data;
+
+  // รายรับ
+  if (inc) {
+    const g = inc.groups;
+    $('iCod').textContent = fm(g.cod.total); $('iCodN').textContent = g.cod.count + ' รายการ · เข้าแล้ว ' + fm(g.cod.paid);
+    $('iWs').textContent = fm(g.ws.total); $('iWsN').textContent = g.ws.count + ' รายการ · เข้าแล้ว ' + fm(g.ws.paid);
+    $('iOther').textContent = fm(g.other.total); $('iOtherN').textContent = g.other.count + ' รายการ · เข้าแล้ว ' + fm(g.other.paid);
+    $('iTotal').textContent = fm(inc.total); $('iPaid').textContent = fm(inc.paid) + ' / ค้าง ' + fm(inc.total - inc.paid);
+    $('iSub').textContent = inc.count + ' รายการ · ' + fm(inc.qty) + ' เส้น/วง';
+    $('iCust').innerHTML = bars(inc.byCustomer, inc.total);
+    rows('i', inc.rows, x => `<tr class="${x.paid ? '' : 'pend'}"><td class="d">${x.date}</td><td>${esc(x.customer)}<span class="tag">${G_LABEL[x.group]}</span><br><small style="color:#666">${esc(x.items)}${x.qty ? ' × ' + x.qty : ''}${x.ref ? ' · ' + esc(x.ref) : ''}</small></td><td class="r">${fm2(x.amount)}</td><td class="d">${x.paid ? '✅' + (x.got && Math.abs(x.got - x.amount) > 0.5 ? '<br><span class="tag warn">' + fm2(x.got) + '</span>' : '') : '⏳'}</td></tr>`);
+  }
   $('kBuy').textContent = fm(buy.total); $('kBuyN').textContent = buy.count + ' ใบ · ' + fm(buy.qty) + ' เส้น/วง';
   $('kExp').textContent = fm(exp.total); $('kExpN').textContent = exp.count + ' รายการ';
   $('kCod').textContent = fm(cod.pendingAllSum); $('kCodN').textContent = cod.pendingAllCount + ' ชิ้น (ทุกเดือน)';
