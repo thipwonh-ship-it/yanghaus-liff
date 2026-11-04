@@ -81,6 +81,8 @@
     <button class="big" onclick="cam.click()">📷 ถ่ายรูป</button>
     <button class="big alt" onclick="pick.click()">🖼 เลือกจากอัลบั้ม</button>
     <div class="hint">ถ่ายให้เห็นทั้งใบ ชัดๆ ตรงๆ จะอ่านตัวเลขได้แม่น</div>
+    <button class="big alt" id="btnManual" onclick="manual()" style="margin-top:14px;border-style:dashed">✍️ กรอกเอง (ไม่มีใบเสร็จ / ไม่ถ่ายรูป)</button>
+    <div class="hint" id="manualHint">เช่น ค่าแรงรายวัน ค่าจ้างแบกของ เงินสดย่อย — บันทึกลงชีทโดยไม่มีรูป</div>
   </div>
 </section>
 
@@ -239,7 +241,7 @@
 
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script>
-const PAGE_VERSION = '2026-11-02e';
+const PAGE_VERSION = '2026-11-04a';
 if ('serviceWorker' in navigator) { try { navigator.serviceWorker.register('sw.js'); } catch (e) {} }   // PWA: เพิ่มไปหน้าจอหลักได้
 const LIFF_ID = '2012109669-kGPX1UtI';
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxm5fuyVniisAk14alXdzSMDsvrf_iQ_lI6Ti6hDDPOs--PSsZMVabqC_OwOP7Paa0SWA/exec';
@@ -327,11 +329,22 @@ function setType(t) {
   if (t === 'buy') $('fBiz').value = 'YANG Haus';
 }
 
+// กรอกเองไม่มีรูป (ค่าใช้จ่าย/ซื้อ/ขาย) — ข้าม AI
+function manual() {
+  if (type === 'cod') return alert('ส่ง COD ต้องถ่ายใบปะหน้า เพราะต้องใช้เลขพัสดุ');
+  imgB64 = ''; img2B64 = ''; $('prev').src = ''; $('prev').classList.add('hide');
+  $('s1').classList.add('hide'); $('s2').classList.remove('hide'); $('msg').innerHTML = ''; window.scrollTo(0, 0);
+  $('aiBox').className = 'ai'; $('aiBox').textContent = '✍️ กรอกเอง — ไม่มีรูปแนบ (ถ้ามีใบเสร็จภายหลัง ถ่ายเพิ่มรอบหน้าได้)';
+  if (type === 'exp') { $('fVat').checked = false; vatCalc(); }
+  const first = type === 'sale' ? 'sCust' : 'fVendor';
+  setTimeout(() => { try { $(first).focus(); } catch (e) {} }, 100);
+}
+
 async function gotPhoto(inp) {
   const f = inp.files[0]; if (!f) return;
   inp.value = '';
   const { b64, url } = await shrink(f, 1600, 0.85);
-  imgB64 = b64; $('prev').src = url;
+  imgB64 = b64; $('prev').src = url; $('prev').classList.remove('hide');
   $('s1').classList.add('hide'); $('s2').classList.remove('hide'); $('msg').innerHTML = ''; window.scrollTo(0, 0);
   $('aiBox').className = 'ai'; $('aiBox').innerHTML = '<span class="spin"></span>AI กำลังอ่านใบเสร็จ…';
   if (!hasAI) { $('aiBox').innerHTML = 'ยังไม่ได้ตั้งค่า AI — กรอกเองได้เลย'; return; }
