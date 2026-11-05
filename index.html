@@ -240,7 +240,23 @@ document.getElementById('carrier').addEventListener('change', e=>{
   document.getElementById('carrierOther').style.display = e.target.value==='อื่นๆ' ? 'block' : 'none';
   fillBranches();
 });
-fillBranches();
+// จำขนส่ง+สาขาล่าสุด (เก็บในเครื่องพนักงาน)
+const LAST_KEY='yh_last_ship';
+function restoreLast(){
+  let last=null; try{ last=JSON.parse(localStorage.getItem(LAST_KEY)||'null'); }catch(_){}
+  fillBranches();
+  if(!last||!last.carrier) return;
+  const cs=document.getElementById('carrier');
+  if([...cs.options].some(o=>o.value===last.carrier)){ cs.value=last.carrier; }
+  else { cs.value='อื่นๆ'; document.getElementById('carrierOther').value=last.carrier; }
+  document.getElementById('carrierOther').style.display = cs.value==='อื่นๆ' ? 'block' : 'none';
+  fillBranches();
+  const sel=document.getElementById('branchSel'), inp=document.getElementById('branch');
+  if([...sel.options].some(o=>o.value===last.branch)){ sel.value=last.branch; syncBranch(); }
+  else if(last.branch){ sel.value='__other'; inp.style.display='block'; inp.value=last.branch; }
+}
+function saveLast(carrier, branch){ try{ localStorage.setItem(LAST_KEY, JSON.stringify({carrier, branch})); }catch(_){} }
+restoreLast();
 
 async function openCam(id, gallery){
   if(scanning){ try{ await scanner.stop(); }catch(_){} document.getElementById('scanner').classList.remove('on'); scanning=false; document.getElementById('scanBtn').textContent='📷 อ่านไม่ติด? สแกนบาร์โค้ดด้วยกล้อง'; }
@@ -352,6 +368,7 @@ document.getElementById('send').onclick = async ()=>{
     const r=await fetch(GAS_URL,{method:'POST',body:JSON.stringify(body)});
     const j=await r.json();
     if(!j.ok) throw new Error(j.error);
+    saveLast(body.carrier, body.branch);
     msg.textContent=`✅ บันทึกแล้ว ${j.time} (${j.count} ชิ้น)`;
     if(liff.isInClient()){
       await liff.sendMessages([{type:'text',text:`${scanned?'📦 ส่งของแล้ว ✅ ยิงรับแล้ว':'📦 ส่งของแล้ว ⏳ ยังไม่ยิงรับ รอตรวจสอบ'} ${j.time}\n${body.carrier} ${body.branch}${scanned?'':'\nรับฝาก: '+staff}\n${j.count} ชิ้น\n${tracking}\n${pos?`📍 https://maps.google.com/?q=${pos.lat},${pos.lng}`:''}`}]).catch(()=>{});
