@@ -24,6 +24,7 @@
   .radio label{font-weight:400;margin:6px 0;display:flex;align-items:center;gap:8px;background:#fff;padding:10px;border:1px solid #ccc;border-radius:8px}
   .radio input{width:auto}
   .chip{display:inline-block;background:#e8f5e9;color:#1b5e20;padding:4px 10px;border-radius:14px;margin:4px 4px 0 0;font-size:14px}
+.galbtn{background:#fff!important;color:#1a73e8!important;border:2px solid #1a73e8!important;font-size:14px;padding:8px;margin-top:6px}
 </style>
 </head>
 <body>
@@ -46,6 +47,7 @@
 <label>ถ่ายรูปสินค้าแต่ละชิ้น ถ่ายใกล้ๆ ให้ใบปะหน้าเต็มจอ <span style="color:#d32f2f">*บังคับ</span></label>
 <input type="file" id="photo1" accept="image/*" capture="environment" style="display:none">
 <button type="button" class="scanbtn" onclick="openCam('photo1')">📸 ถ่ายรูปสินค้า (กดซ้ำทุกชิ้น)</button>
+<button type="button" class="scanbtn galbtn" onclick="openCam('photo1',true)">🖼️ เลือกจากคลังรูป (ถ่ายไว้แล้ว)</button>
 <div class="photos" id="prev1"></div>
 <div id="filescan" style="display:none"></div>
 <div class="small" id="cnt1"></div>
@@ -66,6 +68,7 @@
 <label>ถ่ายสลิป/หน้าจอที่ขนส่งยิงรับของ <span style="color:#d32f2f">*บังคับ</span></label>
 <input type="file" id="photo2" accept="image/*" capture="environment" style="display:none">
 <button type="button" class="scanbtn" onclick="openCam('photo2')">📸 ถ่ายสลิปยิงรับ (1 รูปพอ)</button>
+<button type="button" class="scanbtn galbtn" onclick="openCam('photo2',true)">🖼️ เลือกจากคลังรูป (ถ่ายไว้แล้ว)</button>
 <div class="photos" id="prev2"></div>
 </div>
 
@@ -73,6 +76,7 @@
 <label>ถ่ายรูปของทั้งหมดให้เห็นครบ <span id="needCount">…</span> ชิ้น <span style="color:#d32f2f">*บังคับ</span></label>
 <input type="file" id="photo3" accept="image/*" capture="environment" style="display:none">
 <button type="button" class="scanbtn" onclick="openCam('photo3')">📸 ถ่ายรูปของทั้งหมด (1 รูปพอ)</button>
+<button type="button" class="scanbtn galbtn" onclick="openCam('photo3',true)">🖼️ เลือกจากคลังรูป (ถ่ายไว้แล้ว)</button>
 <div class="photos" id="prev3"></div>
 <div class="radio"><label><input type="checkbox" id="confirmCount"> ✔ ยืนยันว่าในรูปเห็นครบ <span id="needCount2">…</span> ชิ้น</label></div>
 <label>พนักงานที่รับฝาก (ชื่อ/ลักษณะ) <span style="color:#d32f2f">*บังคับ</span></label>
@@ -238,9 +242,13 @@ document.getElementById('carrier').addEventListener('change', e=>{
 });
 fillBranches();
 
-async function openCam(id){
+async function openCam(id, gallery){
   if(scanning){ try{ await scanner.stop(); }catch(_){} document.getElementById('scanner').classList.remove('on'); scanning=false; document.getElementById('scanBtn').textContent='📷 อ่านไม่ติด? สแกนบาร์โค้ดด้วยกล้อง'; }
-  document.getElementById(id).click();
+  const inp=document.getElementById(id);
+  // iPhone: ถ้ามี capture จะเปิดกล้องอย่างเดียว → ปุ่มคลังรูปเอา capture ออก
+  if(gallery){ inp.removeAttribute('capture'); if(id==='photo1') inp.multiple=true; }
+  else { inp.setAttribute('capture','environment'); inp.multiple=false; }
+  inp.click();
 }
 // ===== สแกนบาร์โค้ด =====
 let scanner = null, scanning = false, lastCode = '', lastTime = 0;
