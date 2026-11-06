@@ -50,6 +50,18 @@
   .pi input[type=checkbox]{width:24px;height:24px;flex:none}
   .pi .t{flex:1;font-size:14px;line-height:1.4}.pi .t b{display:block;font-size:15px}
   .pi input[type=number]{width:100px;padding:8px;font-size:15px;border:1px solid var(--line);border-radius:8px;text-align:right}
+  /* สต๊อก */
+  .it{border:2px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px;background:#fff}
+  .it .ih{display:flex;justify-content:space-between;align-items:center;font-weight:700;color:var(--navy)}
+  .it .ih button{border:0;background:#fdecea;color:var(--err);border-radius:8px;padding:6px 10px;font-size:14px}
+  .it img{width:96px;height:96px;object-fit:cover;border-radius:8px;border:1px solid var(--line);margin-top:8px}
+  .code{font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#eef6f6;color:#05605f;padding:6px 8px;border-radius:6px;margin-top:8px;word-break:break-all}
+  .seg.sm button{padding:10px 4px;font-size:14px}
+  .sk{padding:10px 0;border-bottom:1px solid var(--line)}
+  .sk b{font-size:15px}.sk .c{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#05605f}
+  .chip{display:inline-block;padding:3px 8px;border-radius:12px;background:#eef6f6;font-size:13px;margin:4px 4px 0 0}
+  .chip.old{background:#fdecea;color:var(--err)}
+  .tq{float:right;font-size:18px;font-weight:700;color:var(--navy)}
 </style>
 </head>
 <body>
@@ -71,6 +83,9 @@
     <div class="seg" style="margin-top:8px">
       <button id="tSale" class="hide" onclick="setType('sale')">🧾 ขาย (โอน/ขายส่ง)</button>
       <button id="tDash" class="hide" onclick="location.href='dashboard.html'">📊 รายจ่ายเดือนนี้</button>
+    </div>
+    <div class="seg" style="margin-top:8px">
+      <button id="tStock" onclick="openStock('count')">🗃 สต๊อกยาง/ล้อ (นับ · รับเข้า · ตัดออก · ดู)</button>
     </div>
     <div class="hint" id="tHint">ค่าแท็กซี่ Lalamove อุปกรณ์ ค่าโฆษณา บิลโทรศัพท์ ฯลฯ</div>
   </div>
@@ -225,11 +240,92 @@
   </div>
 </section>
 
+<!-- 🗃 สต๊อกยาง/ล้อ -->
+<section id="s5" class="hide">
+  <div class="card">
+    <h2>🗃 สต๊อกยาง/ล้อ</h2>
+    <div class="seg sm">
+      <button id="kcount" onclick="setStock('count')">🔢 นับตั้งต้น</button>
+      <button id="kin" onclick="setStock('in')">📥 รับเข้า</button>
+      <button id="kout" onclick="setStock('out')">📤 ตัดออก</button>
+      <button id="kview" onclick="setStock('view')">🔍 ดูสต๊อก</button>
+    </div>
+    <div class="hint" id="kHint"></div>
+  </div>
+
+  <div id="kForm">
+    <!-- เอกสาร: รับเข้า = บิล/ใบกำกับ · ตัดออก = ใบปะหน้า -->
+    <div class="card" id="kDocCard">
+      <h2 id="kDocTitle">ถ่ายบิล</h2>
+      <input id="kdCam" type="file" accept="image/*" capture="environment" class="hide" onchange="gotStockDoc(this)">
+      <input id="kdPick" type="file" accept="image/*" class="hide" onchange="gotStockDoc(this)">
+      <div class="seg"><button type="button" onclick="kdCam.click()">📷 ถ่ายรูป</button><button type="button" onclick="kdPick.click()">🖼 เลือกจากอัลบั้ม</button></div>
+      <img id="kDocPrev" class="prev hide" alt="" style="margin-top:8px;max-height:200px">
+      <div id="kDocAi" class="ai hide" style="margin-top:8px"></div>
+      <div class="hint" id="kDocHint"></div>
+      <div id="kInF">
+        <div class="row">
+          <div style="flex:2"><label>ซัพพลายเออร์ / ผู้คืน</label><input id="kParty" type="text" list="supList"></div>
+          <div><label>เหตุผล</label><select id="kReasonIn"><option>ซื้อเข้าสต๊อก</option><option>ลูกค้าคืน</option><option>ปรับยอด (เพิ่ม)</option><option>อื่นๆ</option></select></div>
+        </div>
+        <div class="row">
+          <div><label>เลขที่บิล/ใบกำกับ</label><input id="kDocNo" type="text"></div>
+          <div><label>เลขผู้เสียภาษี</label><input id="kTax" type="text" inputmode="numeric" maxlength="13"></div>
+        </div>
+        <div class="row">
+          <div><label>ยอดรวมบิล (บาท)</label><input id="kBillTotal" type="number" step="0.01" inputmode="decimal"></div>
+          <div><label>เอกสาร</label><select id="kDocType"><option value="copy">ใบส่งของ / สำเนา</option><option value="original">ใบกำกับตัวจริง</option></select></div>
+        </div>
+        <div class="chk"><input id="kHasVat" type="checkbox" checked><span>มีใบกำกับภาษี (ราคารวม VAT)</span></div>
+        <div class="chk"><input id="kAlsoBuy" type="checkbox" checked><span>ลงแท็บ <b>ซื้อ</b> (บัญชี) ด้วย — ไม่ต้องกดปุ่มซื้อของมาขายซ้ำ</span></div>
+        <div class="hint">ถ้าบิลนี้เคยลงแท็บซื้อแล้ว ระบบไม่ลงซ้ำ (ลงแค่สต๊อก) · ลูกค้าคืน → ติ๊กออก</div>
+      </div>
+      <div id="kOutF" class="hide">
+        <div class="row">
+          <div><label>ช่องทาง / เหตุผล</label><select id="kReasonOut"><option>ขาย Shopee</option><option>ขาย TikTok</option><option>ขาย Lazada</option><option>ขาย COD / Facebook</option><option>ขายส่ง</option><option>เคลม / คืนซัพพลายเออร์</option><option>เสียหาย / ใช้เอง</option><option>ปรับยอด (ลด)</option></select></div>
+          <div><label>ลูกค้า</label><input id="kCust" type="text"></div>
+        </div>
+        <div class="row">
+          <div><label>เลขออเดอร์</label><input id="kOrder" type="text"></div>
+          <div><label>เลขพัสดุ</label><input id="kTrack" type="text"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div><label>วันที่</label><input id="kDate" type="date"></div>
+        <div><label>ที่เก็บ (ใช้กับทุกรายการ ถ้าไม่ระบุแยก)</label><input id="kLoc" type="text" placeholder="เช่น ชั้น A / บ้าน / ตึก"></div>
+      </div>
+      <label>หมายเหตุ</label><input id="kNote" type="text">
+    </div>
+
+    <datalist id="prodList"></datalist>
+    <datalist id="brandList"></datalist>
+    <input id="kiCam" type="file" accept="image/*" capture="environment" class="hide" onchange="gotSidewall(this)">
+    <input id="kiPick" type="file" accept="image/*" class="hide" onchange="gotSidewall(this)">
+    <div id="kItems"></div>
+    <button class="big alt" onclick="addItem()" style="border-style:dashed">➕ เพิ่มรายการ</button>
+    <button class="big" id="kSave" onclick="saveStock()">💾 บันทึกสต๊อก</button>
+    <button class="big alt" onclick="reset()">↩︎ กลับหน้าแรก</button>
+    <div id="kMsg"></div>
+  </div>
+
+  <div id="kViewBox" class="card hide">
+    <input id="kSearch" type="text" placeholder="🔎 ค้นหา ยี่ห้อ / ขนาด / รุ่น / รหัส เช่น 225/50R18" oninput="renderStock()">
+    <div class="seg sm" style="margin-top:8px"><button id="vAll" class="on" onclick="setViewKind('')">ทั้งหมด</button><button id="vTire" onclick="setViewKind('tire')">ยาง</button><button id="vWheel" onclick="setViewKind('wheel')">ล้อ</button></div>
+    <div class="hint" id="kViewSum" style="margin-top:8px"></div>
+    <div id="kViewList"></div>
+    <button class="big alt" onclick="reset()">↩︎ กลับหน้าแรก</button>
+  </div>
+</section>
+
 <!-- STEP 3: เสร็จ -->
 <section id="s3" class="hide">
   <div class="card">
     <h2>✅ บันทึกแล้ว</h2>
     <div class="sum" id="sumBox"></div>
+    <button class="big hide" id="kAgain" onclick="openStock(lastStockMode)">🗃 บันทึกสต๊อกต่อ</button>
     <button class="big" onclick="reset()">📷 จดใบต่อไป</button>
     <button class="big alt" onclick="closeApp()">ปิด</button>
   </div>
@@ -241,7 +337,7 @@
 
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script>
-const PAGE_VERSION = '2026-11-04b';
+const PAGE_VERSION = '2026-11-06u';
 if ('serviceWorker' in navigator) { try { navigator.serviceWorker.register('sw.js'); } catch (e) {} }   // PWA: เพิ่มไปหน้าจอหลักได้
 const LIFF_ID = '2012109669-kGPX1UtI';
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxm5fuyVniisAk14alXdzSMDsvrf_iQ_lI6Ti6hDDPOs--PSsZMVabqC_OwOP7Paa0SWA/exec';
@@ -302,6 +398,7 @@ async function init() {
   const mode = new URLSearchParams(location.search).get('mode') || (liff.state && new URLSearchParams(liff.state).get('mode'));
   if (['exp', 'buy', 'cod', 'sale'].includes(mode)) setType(mode);
   if (mode === 'paid') openPaid();
+  if (/^stock/.test(mode || '')) openStock((mode.split('-')[1]) || 'count');   // ?mode=stock | stock-in | stock-out | stock-view
 }
 function fillConfig() {
   fill($('fBiz'), cfg.business, 'YANG Haus');
@@ -627,6 +724,381 @@ async function savePaid() {
   try { if (liff.isInClient()) await liff.sendMessages([{ type: 'text', text: lines.join('\n') }]); } catch (e) {}
 }
 
+/* ================= 🗃 สต๊อกยาง/ล้อ ================= */
+let stockMode = 'count', stockItems = [], stockData = null, stockDocB64 = '', viewKind = '', sideIdx = -1, lastStockMode = 'count';
+// ↓ ฟังก์ชันสร้างรหัส — ก๊อปมาจาก Code.gs (ต้องตรงกันทั้ง 2 ที่ ถ้าแก้ที่หนึ่งให้แก้อีกที่ด้วย)
+const sNorm_ = s => String(s || '').toUpperCase().replace(/[^A-Z0-9ก-๙]/g, '');
+const sLatin_ = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+function brand2_(b) { const l = sLatin_(b); return l ? l.slice(0, 2) : (sNorm_(b).slice(0, 2) || 'XX'); }
+function tireSizeCode_(s) {
+  s = String(s || '').toUpperCase();
+  let m = /(\d{3})\s*\/\s*(\d{2})\s*Z?\s*R?\s*F?\s*(\d{2})/.exec(s);
+  if (m) return m[1] + m[2] + m[3];
+  m = /(\d{2})\s*[X×*]\s*(\d{1,2}(?:\.\d+)?)\s*R?\s*(\d{2})/.exec(s);   // LT 31x10.5R15
+  if (m) return m[1] + String(m[2]).replace('.', '') + m[3];
+  return sLatin_(s);
+}
+function wheelSizeCode_(s) {
+  const m = /(\d{2})\s*[xX×*]\s*(\d{1,2}(?:\.\d+)?)/.exec(String(s || ''));
+  return m ? m[1] + String(Math.round(Number(m[2]) * 10)) : sLatin_(s);
+}
+function pcdCode_(s) {
+  const m = /(\d)\s*[xXH×*\-\/]\s*(\d{3})/.exec(String(s || ''));
+  return m ? m[1] + m[2] : sLatin_(s);
+}
+function etCode_(s) {
+  const m = /(-?\d+)/.exec(String(s || '').replace(/\s/g, ''));
+  if (!m) return '';
+  const n = Number(m[1]);
+  return n < 0 ? 'ETN' + Math.abs(n) : 'ET' + n;
+}
+const COLOR_CODES = [['ดำด้าน', 'MBK'], ['MATTE BLACK', 'MBK'], ['ดำเงา', 'GBK'], ['GLOSS BLACK', 'GBK'], ['กันเมทัล', 'GM'], ['GUNMETAL', 'GM'], ['ไทเท', 'TI'], ['TITAN', 'TI'],
+  ['บรอนซ์', 'BZ'], ['BRONZE', 'BZ'], ['ขัดเงา', 'PL'], ['POLISH', 'PL'], ['โครม', 'CR'], ['CHROME', 'CR'], ['ดำ', 'BK'], ['BLACK', 'BK'], ['เงิน', 'SV'], ['SILVER', 'SV'],
+  ['ทอง', 'GD'], ['GOLD', 'GD'], ['ขาว', 'WH'], ['WHITE', 'WH'], ['เทา', 'GY'], ['GREY', 'GY'], ['GRAY', 'GY'], ['แดง', 'RD'], ['RED', 'RD'], ['น้ำเงิน', 'BL'], ['ฟ้า', 'BL'], ['BLUE', 'BL']];
+function colorCode_(s) {
+  const u = String(s || '').toUpperCase().trim();
+  if (!u) return '';
+  for (const [k, c] of COLOR_CODES) if (u.indexOf(k) >= 0) return c;
+  return sLatin_(u).slice(0, 3);
+}
+function isWheel_(kind) { return /wheel|ล้อ/i.test(String(kind || '')); }
+function prodParts_(p) {
+  const w = isWheel_(p.kind);
+  return w ? { w, b: brand2_(p.brand), m: sLatin_(p.model), sz: wheelSizeCode_(p.size), pcd: pcdCode_(p.pcd), et: etCode_(p.et), col: colorCode_(p.color) }
+           : { w, b: brand2_(p.brand), m: sLatin_(p.model), sz: tireSizeCode_(p.size) };
+}
+function makeCode_(p, mLen) {
+  const x = prodParts_(p);
+  const head = x.m ? x.b + x.m.slice(0, mLen || 2) : sLatin_(p.brand).slice(0, 4) || x.b;   // ไม่มีรุ่น → ยี่ห้อ 4 ตัวแรก (DEESTONE → DEES)
+  return x.w ? head + x.sz + x.pcd + x.col : head + x.sz;
+}
+function prodKey_(p) {
+  const x = prodParts_(p);
+  return [x.w ? 'W' : 'T', sNorm_(p.brand), sNorm_(p.model), x.sz, x.pcd || '', x.et || '', x.col || ''].join('|');
+}
+function fullName_(p) {
+  const m = /(-?\d+)/.exec(String(p.et || '').replace(/\s/g, ''));
+  const et = m ? 'ET' + Number(m[1]) : '';
+  return (isWheel_(p.kind) ? [p.brand, p.model, p.size, p.pcd, et, p.color] : [p.brand, p.model, p.size])
+    .map(s => String(s || '').trim()).filter(Boolean).join(' ');
+}
+const esc = s => String(s === undefined || s === null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmtN = n => Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+const dotYear = d => /^\d{4}$/.test(d || '') ? 2000 + Number(d.slice(2)) : 0;
+const dotSort = d => /^\d{4}$/.test(d || '') ? d.slice(2) + d.slice(0, 2) : '9999';
+function blankItem() { return { kind: 'tire', brand: '', model: '', size: '', pcd: '', et: '', color: '', dot: '', qty: '', cost: '', cond: 'ใหม่', loc: '', image: '', thumb: '', code: '', hint: '' }; }
+const prods = () => (stockData && stockData.products) || [];
+const bals = () => (stockData && stockData.balances) || [];
+
+async function loadStock() {
+  if (!stockData) { try { stockData = JSON.parse(localStorage.getItem('yh_stock') || 'null'); } catch (e) {} if (stockData) fillProdLists(); }
+  const r = await post({ action: 'stockList' });
+  if (r.ok) { stockData = r; try { localStorage.setItem('yh_stock', JSON.stringify(r)); } catch (e) {} fillProdLists(); }
+  else if (!stockData) $('kViewList').innerHTML = '<div class="msg err">โหลดสต๊อกไม่ได้: ' + esc(r.error || '') + '<br>(ถ้าเพิ่งอัปเดตระบบ ต้อง Deploy Code.gs เวอร์ชันใหม่ก่อน)</div>';
+  return stockData;
+}
+function fillProdLists() {
+  $('prodList').innerHTML = prods().map(x => `<option value="${esc(x.name)} · ${esc(x.code)}">`).join('');
+  $('brandList').innerHTML = [...new Set(prods().map(x => x.brand).filter(Boolean))].sort().map(b => `<option value="${esc(b)}">`).join('');
+  if ($('s5').classList.contains('hide')) return;
+  if (stockMode === 'view') renderStock();
+  else if (stockMode === 'out') renderItems();
+  else stockItems.forEach((it, i) => codePreview(i));
+}
+function openStock(mode) {
+  ['s1', 's2', 's3', 's4'].forEach(id => $(id).classList.add('hide'));
+  $('s5').classList.remove('hide'); window.scrollTo(0, 0);
+  if (!$('kDate').value) $('kDate').value = today();
+  stockMode = '';
+  setStock(mode || 'count');
+  loadStock();
+}
+function clearStockForm() {
+  stockItems = []; stockDocB64 = '';
+  ['kParty', 'kDocNo', 'kTax', 'kBillTotal', 'kCust', 'kOrder', 'kTrack', 'kNote'].forEach(id => $(id).value = '');
+  $('kHasVat').checked = true; $('kAlsoBuy').checked = true; $('kDocType').value = 'copy'; $('kReasonIn').selectedIndex = 0; $('kReasonOut').selectedIndex = 0;
+  $('kDocPrev').classList.add('hide'); $('kDocAi').classList.add('hide'); $('kMsg').innerHTML = '';
+}
+function setStock(m) {
+  const dirty = stockItems.some(it => it.brand || it.size || it.code || it.qty);
+  if (m !== 'view' && stockMode && stockMode !== 'view' && m !== stockMode && dirty && !confirm('เปลี่ยนโหมด รายการที่กรอกไว้จะหาย ต่อไหม?')) return;
+  if (m !== 'view' && m !== stockMode && !(stockMode === 'view' && m === lastStockMode)) clearStockForm();
+  stockMode = m; if (m !== 'view') lastStockMode = m;
+  ['count', 'in', 'out', 'view'].forEach(x => $('k' + x).classList.toggle('on', x === m));
+  $('kForm').classList.toggle('hide', m === 'view'); $('kViewBox').classList.toggle('hide', m !== 'view');
+  $('kDocCard').classList.toggle('hide', m === 'count'); $('kInF').classList.toggle('hide', m !== 'in'); $('kOutF').classList.toggle('hide', m !== 'out');
+  $('kDocTitle').textContent = m === 'in' ? '📄 ถ่ายบิล / ใบส่งของ / ใบกำกับ (ไม่มีบิล ข้ามได้)' : '🏷 ถ่ายใบปะหน้า (Shopee / TikTok / ขนส่ง)';
+  $('kDocHint').textContent = m === 'in' ? 'AI อ่านรุ่น ขนาด จำนวน ราคาจากบิล → แล้วถ่ายแก้มยางแต่ละรุ่นเพื่ออ่านปี DOT · พิมพ์เองได้ทุกช่อง'
+    : 'AI อ่านเลขออเดอร์ เลขพัสดุ สินค้า จำนวน → จับคู่รหัสในสต๊อกให้ (ปี DOT เก่าออกก่อน) · ไม่มีใบปะหน้า เลือกสินค้าเองด้านล่าง';
+  $('kHint').textContent = {
+    count: 'จัดยางรุ่น/ขนาด/ปี DOT เดียวกันเป็นกองเดียว → ถ่ายแก้มยาง 1 เส้นต่อกอง + ใส่จำนวน · ล้อ: ถ่ายหน้าล้อ/สติกเกอร์ขนาด · กรอกเองได้ทุกช่อง · บันทึกทีละกองหรือหลายกองก็ได้',
+    in: 'ของเข้า: ซื้อเก็บสต๊อก หรือ ลูกค้าคืนล้อ/ยาง',
+    out: 'ของออก: ขายออนไลน์ / COD / ขายส่ง / เคลม · ตัดตามจริงทีละเส้น/วง',
+    view: 'ยอดคงเหลือตอนนี้ แยกปี DOT · แดง = ยางผลิตเกิน 2 ปี'
+  }[m];
+  if (m === 'view') { renderStock(); loadStock(); return; }
+  if (!stockItems.length) stockItems.push(blankItem());
+  renderItems();
+}
+function addItem() { stockItems.push(blankItem()); renderItems(); setTimeout(() => $('it' + (stockItems.length - 1)).scrollIntoView({ behavior: 'smooth' }), 50); }
+function delItem(i) { stockItems.splice(i, 1); if (!stockItems.length) stockItems.push(blankItem()); renderItems(); }
+function setF(i, f, v, rerender) { stockItems[i][f] = v; if (rerender) renderItems(); else if (stockMode === 'out') outInfo(i); else codePreview(i); }
+function renderItems() {
+  $('kItems').innerHTML = stockItems.map((it, i) => stockMode === 'out' ? outCard(it, i) : inCard(it, i)).join('');
+  stockItems.forEach((it, i) => stockMode === 'out' ? outInfo(i) : codePreview(i));
+}
+function inCard(it, i) {
+  const w = isWheel_(it.kind);
+  const inp = (f, ph, extra) => `<input type="text" value="${esc(it[f])}" placeholder="${ph || ''}" ${extra || ''} oninput="setF(${i},'${f}',this.value)">`;
+  return `<div class="it" id="it${i}">
+  <div class="ih"><span>รายการ ${i + 1}</span><button type="button" onclick="delItem(${i})">✕ ลบ</button></div>
+  <div class="seg" style="margin-top:8px"><button type="button" onclick="sideCam(${i},false)">📷 ถ่ายแก้ม${w ? 'ล้อ' : 'ยาง'}</button><button type="button" onclick="sideCam(${i},true)">🖼 อัลบั้ม</button></div>
+  ${it.thumb ? `<img src="${it.thumb}" alt="">` : ''}
+  ${it.hint ? `<div class="ai ${it.hintOk ? 'good' : ''}" style="margin-top:8px">${esc(it.hint)}</div>` : ''}
+  <label>เลือกรุ่นที่มีในระบบแล้ว (ถ้ามี)</label><input type="text" list="prodList" placeholder="🔎 พิมพ์ค้นหา ยี่ห้อ/ขนาด" onchange="pickProd(${i},this.value)">
+  <div class="row"><div><label>ประเภท</label><select onchange="setF(${i},'kind',this.value,true)"><option value="tire" ${!w ? 'selected' : ''}>ยาง</option><option value="wheel" ${w ? 'selected' : ''}>ล้อ</option></select></div>
+    <div style="flex:2"><label>ยี่ห้อ</label>${inp('brand', w ? 'KAYS' : 'ATLANDER', 'list="brandList" autocapitalize="characters"')}</div></div>
+  <div class="row"><div><label>รุ่น</label>${inp('model', w ? 'K12' : 'AX88')}</div><div><label>ขนาด</label>${inp('size', w ? '18x8.5' : '225/50R18')}</div></div>
+  ${w ? `<div class="row"><div><label>PCD</label>${inp('pcd', '5x114.3')}</div><div><label>ออฟ ET</label>${inp('et', '35', 'inputmode="numeric"')}</div><div><label>สี</label>${inp('color', 'ดำ')}</div></div>` : ''}
+  <div class="row">${!w ? `<div><label>ปี DOT (4 หลัก)</label><input type="text" inputmode="numeric" maxlength="4" placeholder="2526" value="${esc(it.dot)}" oninput="this.value=this.value.replace(/\\D/g,'');setF(${i},'dot',this.value)"></div>` : ''}
+    <div><label>จำนวน (${w ? 'วง' : 'เส้น'})</label><input type="number" inputmode="numeric" value="${esc(it.qty)}" oninput="setF(${i},'qty',this.value)"></div>
+    <div><label>ต้นทุน/ชิ้น</label><input type="number" step="0.01" inputmode="decimal" value="${esc(it.cost)}" placeholder="รวม VAT" oninput="setF(${i},'cost',this.value)"></div></div>
+  <div class="row"><div><label>สภาพ</label><select onchange="setF(${i},'cond',this.value)">${['ใหม่', 'มีตำหนิ', 'มือสอง'].map(c => `<option ${it.cond === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+    <div><label>ที่เก็บ</label>${inp('loc', 'ตามด้านบน')}</div></div>
+  <div class="code" id="cp${i}"></div></div>`;
+}
+function codePreview(i) {
+  const it = stockItems[i], el = $('cp' + i); if (!el || !it) return;
+  if (!String(it.brand).trim() || !String(it.size).trim()) { el.textContent = 'รหัส: (ใส่ยี่ห้อ + ขนาด แล้วระบบสร้างให้)'; return; }
+  const hit = prods().find(p => prodKey_(p) === prodKey_(it));
+  const y = dotYear(it.dot);
+  el.innerHTML = (hit ? 'รหัส: <b>' + esc(hit.code) + '</b> ✓ มีในระบบ' : 'รหัสใหม่: <b>' + esc(makeCode_(it)) + '</b>') +
+    (!isWheel_(it.kind) ? (y ? ' · ผลิตสัปดาห์ ' + Number(it.dot.slice(0, 2)) + ' ปี ' + y : ' · ⚠️ ยังไม่มีปี DOT') : '');
+}
+function pickProd(i, v) {
+  const code = String(v || '').split('·').pop().trim();
+  const p = prods().find(x => x.code === code); if (!p) return;
+  Object.assign(stockItems[i], { kind: p.kind, brand: p.brand, model: p.model, size: p.size, pcd: p.pcd, et: p.et, color: p.color });
+  renderItems();
+}
+function sideCam(i, album) { sideIdx = i; (album ? $('kiPick') : $('kiCam')).click(); }
+async function gotSidewall(inp) {
+  const f = inp.files[0]; inp.value = ''; if (!f) return;
+  const i = sideIdx, it = stockItems[i]; if (!it) return;
+  const { b64, url } = await shrink(f, 1280, 0.8);
+  it.image = b64; it.thumb = url; it.hint = '⏳ AI กำลังอ่านแก้มยาง/ล้อ…'; it.hintOk = false; renderItems();
+  if (!hasAI) { it.hint = 'ยังไม่ได้ตั้งค่า AI — กรอกเอง (รูปถูกเก็บให้)'; renderItems(); return; }
+  const r = await post({ action: 'read', image: b64, mime: 'image/jpeg', type: 'sidewall' });
+  if (!r.ok || !r.data) { it.hint = 'อ่านไม่ได้ กรอกเอง (รูปถูกเก็บให้)' + (r.error ? ' · ' + r.error : ''); renderItems(); return; }
+  const d = r.data, fresh = !String(it.brand).trim();
+  const put = (k, v) => { if (v !== undefined && v !== null && String(v).trim() && (fresh || !String(it[k]).trim())) it[k] = String(v).trim(); };
+  if (fresh && d.kind) it.kind = d.kind === 'wheel' ? 'wheel' : 'tire';
+  put('brand', d.brand); put('model', d.model); put('size', d.size); put('pcd', d.pcd); put('et', d.et); put('color', d.color);
+  const dot = String(d.dot || '').replace(/\D/g, '');
+  if (/^\d{4}$/.test(dot)) it.dot = dot;
+  it.hintOk = true;
+  it.hint = 'AI อ่านแล้ว (' + Math.round((d.confidence || 0) * 100) + '%) — เช็คยี่ห้อ ขนาด' + (it.kind === 'wheel' ? ' PCD ET สี' : ' ปี DOT') + ' แล้วใส่จำนวน' +
+    (it.kind !== 'wheel' && !/^\d{4}$/.test(dot) ? ' · ⚠️ ไม่เห็นปี DOT: ถ่ายใกล้ๆ ตรงตัวเลข 4 หลักในวงรีท้ายรหัส DOT' : '');
+  renderItems();
+}
+
+/* ตัดออก: เลือกจากยอดคงเหลือ (รหัส + ปี DOT) */
+function outCard(it, i) {
+  const opts = bals().filter(b => b.qty > 0 || (b.code === it.code && b.dot === it.dot));
+  const known = opts.some(b => b.code === it.code && b.dot === it.dot);
+  return `<div class="it" id="it${i}">
+  <div class="ih"><span>รายการ ${i + 1}</span><button type="button" onclick="delItem(${i})">✕ ลบ</button></div>
+  ${it.hint ? `<div class="ai ${it.hintOk ? 'good' : ''}" style="margin-top:8px">${esc(it.hint)}</div>` : ''}
+  <label>สินค้า + ปี DOT (จากสต๊อก)</label>
+  <select onchange="pickOut(${i},this.value)"><option value="">— เลือกสินค้าในสต๊อก —</option>
+  ${!known && it.code ? `<option value="${esc(it.code)}|${esc(it.dot)}" selected>${esc(it.code)} · DOT ${esc(it.dot || '-')} (ไม่มีในสต๊อก)</option>` : ''}
+  ${opts.map(b => `<option value="${esc(b.code)}|${esc(b.dot)}" ${b.code === it.code && b.dot === it.dot ? 'selected' : ''}>${esc(b.name)} · DOT ${esc(b.dot || '-')} · เหลือ ${fmtN(b.qty)}</option>`).join('')}</select>
+  <div class="row"><div><label>จำนวนที่ตัด (เส้น/วง)</label><input type="number" inputmode="numeric" value="${esc(it.qty)}" oninput="setF(${i},'qty',this.value)"></div><div></div></div>
+  <div class="code" id="cp${i}"></div></div>`;
+}
+function pickOut(i, v) { const [code, dot] = String(v || '').split('|'); stockItems[i].code = code || ''; stockItems[i].dot = dot || ''; outInfo(i); }
+function outInfo(i) {
+  const it = stockItems[i], el = $('cp' + i); if (!el || !it) return;
+  if (!it.code) { el.textContent = 'ยังไม่ได้เลือกสินค้า'; return; }
+  const b = bals().find(x => x.code === it.code && x.dot === it.dot), left = b ? b.qty : 0, q = Number(it.qty) || 0;
+  el.innerHTML = 'รหัส: <b>' + esc(it.code) + '</b> · DOT ' + esc(it.dot || '-') + ' · เหลือ ' + fmtN(left) + (q ? ' → หลังตัด ' + fmtN(left - q) : '') + (q > left ? ' ⚠️ <b style="color:#c62828">เกินยอดคงเหลือ</b>' : '');
+}
+
+/* รูปเอกสาร: รับเข้า = บิล · ตัดออก = ใบปะหน้า */
+async function gotStockDoc(inp) {
+  const f = inp.files[0]; inp.value = ''; if (!f) return;
+  const { b64, url } = await shrink(f, 1600, 0.85);
+  stockDocB64 = b64; $('kDocPrev').src = url; $('kDocPrev').classList.remove('hide');
+  const box = $('kDocAi'); box.className = 'ai'; box.classList.remove('hide');
+  if (!hasAI) { box.textContent = 'ยังไม่ได้ตั้งค่า AI — กรอกเอง (รูปถูกเก็บให้)'; return; }
+  box.innerHTML = '<span class="spin"></span>AI กำลังอ่าน' + (stockMode === 'in' ? 'บิล' : 'ใบปะหน้า') + '…';
+  const mode = stockMode;
+  const [r] = await Promise.all([post({ action: 'read', image: b64, mime: 'image/jpeg', type: mode === 'in' ? 'stockbill' : 'label' }), stockData ? null : loadStock()]);
+  if (!r.ok || !r.data) { box.textContent = 'อ่านอัตโนมัติไม่ได้ กรอกเองได้เลย (รูปถูกเก็บให้)' + (r.error ? ' · ' + r.error : ''); return; }
+  if (mode === 'in') applyBill(r.data); else applyLabel(r.data);
+}
+const isBlankItem = it => !String(it.brand).trim() && !String(it.size).trim() && !it.code && !it.qty;
+function applyBill(d) {
+  if (d.date) $('kDate').value = fixDate(d.date);
+  if (d.vendor && !isOurName(d.vendor)) $('kParty').value = d.vendor;
+  if (d.invoice_no) $('kDocNo').value = d.invoice_no;
+  if (d.tax_id) $('kTax').value = String(d.tax_id).replace(/\D/g, '');
+  if (d.total) $('kBillTotal').value = Number(d.total).toFixed(2);
+  $('kHasVat').checked = !!d.is_tax_invoice;
+  $('kDocType').value = d.doc_type === 'tax_invoice_original' ? 'original' : 'copy';
+  const lines = (d.lines || []).filter(l => l && (l.brand || l.size || l.model));
+  if (stockItems.every(isBlankItem)) stockItems = [];
+  lines.forEach(l => {
+    const it = blankItem();
+    Object.assign(it, { kind: l.kind === 'wheel' ? 'wheel' : 'tire', brand: l.brand || '', model: l.model || '', size: l.size || '', pcd: l.pcd || '', et: l.et || '', color: l.color || '',
+      qty: Number(l.qty) || '', cost: l.unit_price ? Number(l.unit_price).toFixed(2) : '', dot: /^\d{4}$/.test(String(l.dot || '')) ? String(l.dot) : '' });
+    it.hint = it.kind === 'tire' && !it.dot ? 'จากบิล — กด 📷 ถ่ายแก้มยางเพื่ออ่านปี DOT (ถ้ามีหลายปี กด ➕ แยกรายการ)' : 'จากบิล — เช็คอีกที';
+    stockItems.push(it);
+  });
+  if (!stockItems.length) stockItems.push(blankItem());
+  renderItems();
+  $('kDocAi').className = 'ai good';
+  $('kDocAi').textContent = 'AI อ่านบิลแล้ว (' + Math.round((d.confidence || 0) * 100) + '%) ได้ ' + lines.length + ' รายการ — เช็คจำนวน ราคา แล้วถ่ายแก้มยางทีละรุ่นเพื่อใส่ปี DOT';
+}
+function sizeKeys(text) {
+  const u = String(text || '').toUpperCase();
+  const t = /(\d{3})\s*\/\s*(\d{2})\s*Z?\s*R?\s*F?\s*(\d{2})/.exec(u);
+  const w = /(\d{2})\s*[X×*]\s*(\d{1,2}(?:\.\d+)?)/.exec(u);
+  return { tire: t ? t[1] + t[2] + t[3] : '', wheel: w ? w[1] + String(Math.round(Number(w[2]) * 10)) : '' };
+}
+function matchCode(line) {
+  const inStock = [...new Set(bals().filter(b => b.qty > 0).map(b => b.code))];
+  const sku = String(line.sku || '').trim().toUpperCase();
+  if (sku) { const hit = prods().find(p => p.code.toUpperCase() === sku || sku.indexOf(p.code.toUpperCase()) >= 0); if (hit) return { code: hit.code, how: 'SKU' }; }
+  const text = [line.name, line.variation, line.size, line.brand].join(' ');
+  const sk = sizeKeys(text), flat = sLatin_(text);
+  let best = null, bestScore = 0, tie = false;
+  prods().filter(p => inStock.includes(p.code)).forEach(p => {
+    let s = 0;
+    if (p.kind === 'wheel') { if (sk.wheel && wheelSizeCode_(p.size) === sk.wheel) s += 5; }
+    else if (sk.tire && tireSizeCode_(p.size) === sk.tire) s += 5;
+    if (s < 5) return;
+    if (p.brand && flat.indexOf(sLatin_(p.brand)) >= 0) s += 3;
+    if (p.model && sLatin_(p.model) && flat.indexOf(sLatin_(p.model)) >= 0) s += 2;
+    if (p.kind === 'wheel' && p.pcd && flat.indexOf(pcdCode_(p.pcd)) >= 0) s += 1;
+    if (s > bestScore) { best = p; bestScore = s; tie = false; } else if (s === bestScore) tie = true;
+  });
+  return best ? { code: best.code, how: tie ? 'เดา (มีหลายรุ่นขนาดเดียวกัน เช็คอีกที)' : 'ชื่อ/ขนาด' } : null;
+}
+function applyLabel(d) {
+  const plat = String(d.platform || '');
+  const reason = /shopee/i.test(plat) ? 'ขาย Shopee' : /tiktok/i.test(plat) ? 'ขาย TikTok' : /lazada/i.test(plat) ? 'ขาย Lazada' : '';
+  if (reason) $('kReasonOut').value = reason;
+  if (d.order_no) $('kOrder').value = String(d.order_no).trim();
+  if (d.tracking) $('kTrack').value = String(d.tracking).replace(/\s/g, '').toUpperCase();
+  if (d.customer && !isOurName(d.customer)) $('kCust').value = d.customer;
+  if (d.date) $('kDate').value = fixDate(d.date);
+  if (stockItems.every(isBlankItem)) stockItems = [];
+  let n = 0;
+  (d.lines || []).forEach(l => {
+    let need = Number(l.pieces) || Number(l.qty) || 1;
+    const src = 'ใบปะหน้า: ' + [l.name, l.variation].filter(Boolean).join(' / ') + ' x' + (l.qty || 1) + (Number(l.pieces) && Number(l.pieces) !== Number(l.qty) ? ' (= ' + l.pieces + ' ชิ้น)' : '');
+    const m = matchCode(l);
+    if (!m) { stockItems.push(Object.assign(blankItem(), { qty: need, hint: src + ' → ❓ ไม่พบในสต๊อก เลือกเอง (หรือสินค้านี้ไม่ได้มาจากสต๊อก ให้ลบรายการ)' })); return; }
+    const lots = bals().filter(b => b.code === m.code && b.qty > 0).sort((a, b) => dotSort(a.dot).localeCompare(dotSort(b.dot)));   // DOT เก่าออกก่อน
+    lots.forEach(b => {
+      if (need <= 0) return;
+      const take = Math.min(need, b.qty); need -= take; n++;
+      stockItems.push(Object.assign(blankItem(), { code: m.code, dot: b.dot, qty: take, hintOk: m.how === 'SKU', hint: src + ' → จับคู่ด้วย' + m.how + ' · DOT ' + (b.dot || '-') }));
+    });
+    if (need > 0) stockItems.push(Object.assign(blankItem(), { code: m.code, dot: lots.length ? lots[lots.length - 1].dot : '', qty: need, hint: src + ' → ⚠️ ของในสต๊อกไม่พอ อีก ' + need + ' ชิ้น' }));
+  });
+  if (!stockItems.length) stockItems.push(blankItem());
+  renderItems();
+  $('kDocAi').className = 'ai good';
+  $('kDocAi').textContent = 'AI อ่านใบปะหน้าแล้ว (' + Math.round((d.confidence || 0) * 100) + '%) — เช็คสินค้า ปี DOT จำนวน ก่อนบันทึก' + (n ? '' : ' · ไม่พบสินค้าที่ตรงกับสต๊อก');
+}
+
+async function saveStock() {
+  const m = stockMode;
+  const items = stockItems.filter(it => !isBlankItem(it));
+  if (!items.length) return kShow('ยังไม่มีรายการ', 'err');
+  const noDot = [];
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i], n = 'รายการ ' + (stockItems.indexOf(it) + 1);
+    if (!(Number(it.qty) > 0)) return kShow(n + ': ใส่จำนวนก่อนค่ะ', 'err');
+    if (m === 'out') { if (!it.code) return kShow(n + ': เลือกสินค้าจากสต๊อกก่อนค่ะ', 'err'); continue; }
+    if (!String(it.brand).trim()) return kShow(n + ': ใส่ยี่ห้อก่อนค่ะ', 'err');
+    if (!String(it.size).trim()) return kShow(n + ': ใส่ขนาดก่อนค่ะ', 'err');
+    if (!isWheel_(it.kind)) {
+      if (it.dot && !/^(0[1-9]|[1-4]\d|5[0-3])\d{2}$/.test(it.dot)) return kShow(n + ': ปี DOT "' + esc(it.dot) + '" ไม่ถูก — 4 หลัก สัปดาห์+ปี เช่น 2526', 'err');
+      if (!it.dot) noDot.push(n);
+    }
+  }
+  if (noDot.length && !confirm(noDot.join(', ') + ' ยังไม่มีปี DOT — บันทึกแบบไม่มี DOT ไหม? (แนะนำถ่ายแก้มยางให้เห็น DOT)')) return;
+  const reason = m === 'in' ? $('kReasonIn').value : m === 'out' ? $('kReasonOut').value : 'นับตั้งต้น';
+  const alsoBuy = m === 'in' && $('kAlsoBuy').checked && reason === 'ซื้อเข้าสต๊อก';
+  if (alsoBuy && !$('kParty').value.trim()) return kShow('ใส่ชื่อซัพพลายเออร์ก่อนค่ะ (ใช้ลงแท็บซื้อ) หรือติ๊กออก "ลงแท็บซื้อด้วย"', 'err');
+  if (m === 'out' && /^ขาย/.test(reason) && !$('kOrder').value.trim() && !$('kTrack').value.trim() && !confirm('ไม่มีเลขออเดอร์/เลขพัสดุ → ระบบกันตัดซ้ำไม่ได้ บันทึกต่อไหม?')) return;
+  if (m === 'out') {
+    const over = items.filter(it => { const b = bals().find(x => x.code === it.code && x.dot === it.dot); return Number(it.qty) > (b ? b.qty : 0); });
+    if (over.length && !confirm(over.length + ' รายการตัดเกินยอดคงเหลือ (ยอดจะติดลบ) — บันทึกต่อไหม?')) return;
+  }
+  const label = { count: 'นับตั้งต้น', in: 'รับเข้า', out: 'ตัดออก' }[m];
+  const preview = items.map(it => '• ' + (m === 'out' ? it.code : makeCode_(it)) + (it.dot ? ' DOT ' + it.dot : '') + ' × ' + it.qty);
+  if (!confirm(label + ' ' + items.length + ' รายการ:\n' + preview.join('\n') + '\n\nถูกต้อง กดตกลงเพื่อบันทึก')) return;
+  $('kSave').disabled = true; kShow('<span class="spin"></span>กำลังบันทึก + เก็บรูป…', '');
+  const loc = $('kLoc').value.trim();
+  const body = {
+    action: 'stockSave', mode: m, date: fixDate($('kDate').value), reason,
+    party: m === 'in' ? $('kParty').value.trim() : m === 'out' ? $('kCust').value.trim() : '',
+    docNo: m === 'in' ? $('kDocNo').value.trim() : m === 'out' ? $('kOrder').value.trim() : '',
+    tracking: m === 'out' ? $('kTrack').value.trim() : '',
+    taxId: $('kTax').value.trim(), billTotal: Number($('kBillTotal').value) || 0, hasVat: $('kHasVat').checked, docType: $('kDocType').value, alsoBuy,
+    docImage: m === 'count' ? '' : stockDocB64, note: $('kNote').value.trim(), by: profile ? profile.displayName : '',
+    items: items.map(it => ({ code: it.code, kind: it.kind, brand: String(it.brand).trim(), model: String(it.model).trim(), size: String(it.size).trim(), pcd: it.pcd, et: it.et, color: it.color,
+      dot: it.dot, qty: Number(it.qty), cost: Number(it.cost) || '', cond: it.cond, loc: String(it.loc || '').trim() || loc, image: it.image }))
+  };
+  const r = await post(body);
+  $('kSave').disabled = false;
+  if (r.dup) return kShow('⛔ บันทึกไปแล้ว ไม่รับซ้ำ → ' + esc(r.where), 'err');
+  if (!r.ok) return kShow('บันทึกไม่สำเร็จ: ' + esc(r.error || ''), 'err');
+  const lines = ['🗃 ' + r.label + ' ' + r.lines.length + ' รายการ → แท็บสต๊อกเคลื่อนไหว' + (body.reason !== r.label ? ' (' + body.reason + ')' : '')]
+    .concat(r.lines.map(l => '• ' + l.name + ' · ' + l.code + ' · DOT ' + (l.dot || '-') + ' ' + (l.qty > 0 ? '+' : '') + l.qty + ' → เหลือ ' + l.left))
+    .concat(r.newCodes && r.newCodes.length ? ['🆕 รหัสใหม่ ' + r.newCodes.length + ' รหัส'] : [])
+    .concat(r.buyNote ? ['🧾 ' + r.buyNote] : [])
+    .concat(body.docNo ? ['เลขที่ ' + body.docNo] : []).concat(body.tracking ? ['พัสดุ ' + body.tracking] : [])
+    .concat((r.warn || []).map(w => '⚠️ ' + w));
+  $('sumBox').innerHTML = lines.map(esc).join('<br>');
+  $('kAgain').classList.remove('hide'); $('kAgain').textContent = '🗃 ' + label + 'ต่อ';
+  stockData = null; try { localStorage.removeItem('yh_stock'); } catch (e) {}
+  clearStockForm();
+  $('s5').classList.add('hide'); $('s3').classList.remove('hide'); window.scrollTo(0, 0);
+  try { if (liff.isInClient()) await liff.sendMessages([{ type: 'text', text: lines.join('\n').slice(0, 4900) }]); } catch (e) {}
+}
+function kShow(html, cls) { $('kMsg').innerHTML = '<div class="msg ' + cls + '">' + html + '</div>'; }
+
+/* ดูสต๊อก */
+function setViewKind(k) { viewKind = k; $('vAll').classList.toggle('on', k === ''); $('vTire').classList.toggle('on', k === 'tire'); $('vWheel').classList.toggle('on', k === 'wheel'); renderStock(); }
+function renderStock() {
+  if (!stockData) { $('kViewList').innerHTML = '<span class="spin"></span>กำลังโหลด…'; return; }
+  const q = sNorm_($('kSearch').value), nowY = new Date().getFullYear();
+  const g = {};
+  bals().forEach(b => {
+    if (viewKind && b.kind !== viewKind) return;
+    if (q && sNorm_(b.name + ' ' + b.code + ' ' + b.size).indexOf(q) < 0) return;
+    const x = g[b.code] || (g[b.code] = { code: b.code, name: b.name, qty: 0, val: 0, lots: [], first: '' });
+    x.qty += b.qty; x.val += b.qty * (b.avgCost || 0); x.lots.push(b);
+    if (b.first && (!x.first || b.first < x.first)) x.first = b.first;
+  });
+  const list = Object.keys(g).map(k => g[k]);
+  const tq = list.reduce((t, x) => t + x.qty, 0), tv = list.reduce((t, x) => t + x.val, 0);
+  $('kViewSum').innerHTML = list.length + ' รหัส · <b>' + fmtN(tq) + '</b> ชิ้น · มูลค่าต้นทุน ' + fmtN(Math.round(tv)) + ' บาท';
+  if (!list.length) { $('kViewList').innerHTML = '<div class="hint">' + (bals().length ? 'ไม่พบ' : 'ยังไม่มีสต๊อก — เริ่มที่ 🔢 นับตั้งต้น') + '</div>'; return; }
+  const today0 = new Date(today() + 'T00:00:00');
+  $('kViewList').innerHTML = list.map(x => {
+    const days = x.first ? Math.round((today0 - new Date(x.first + 'T00:00:00')) / 864e5) : '';
+    return `<div class="sk"><span class="tq">${fmtN(x.qty)}</span><b>${esc(x.name)}</b><div class="c">${esc(x.code)}</div>` +
+      x.lots.sort((a, b) => dotSort(a.dot).localeCompare(dotSort(b.dot))).map(b => `<span class="chip ${b.qty < 0 || (dotYear(b.dot) && dotYear(b.dot) <= nowY - 2) ? 'old' : ''}">${b.dot ? 'DOT ' + esc(b.dot) : 'ไม่มี DOT'} × ${fmtN(b.qty)}${b.qty < 0 ? ' ติดลบ!' : ''}</span>`).join('') +
+      (days !== '' ? ` <span class="hint">· เก็บมา ${days} วัน${x.lots.length ? ' · ต้นทุน ~' + fmtN(Math.round(x.val / (x.qty || 1))) : ''}</span>` : '') + '</div>';
+  }).join('');
+}
+
 function show(html, cls) { $('msg').innerHTML = '<div class="msg ' + cls + '">' + html + '</div>'; }
 function reset() {
   imgB64 = ''; img2B64 = ''; $('prev2').classList.add('hide'); $('c2Box').innerHTML = 'รูปที่ 1 ควรเป็น <b>ใบปะหน้า</b> (ชื่อ/เบอร์/ยอด COD) · รูปที่ 2 <b>ใบเสร็จขนส่ง</b> (ค่าส่ง/fee) — ถ่ายเพิ่มได้เลย';
@@ -636,7 +1108,8 @@ function reset() {
   $('sPaid').checked = true; $('sInv').value = 'ไม่ออก'; $('sDate').value = today();
   $('cPaid').checked = true; $('cHasVat').checked = false; $('cDate').value = today(); $('cHint').textContent = ''; $('cPaidSum').textContent = '';
   $('fVat').checked = false; $('fDate').value = today(); if (cfg) $('fSource').value = 'หน้าร้าน'; pendingBuy = []; $('gMatch').classList.add('hide'); setDoc('copy'); $('vatCalc').textContent = ''; $('vatNote').classList.add('hide');
-  $('s2').classList.add('hide'); $('s3').classList.add('hide'); $('s4').classList.add('hide'); $('s1').classList.remove('hide'); window.scrollTo(0, 0);
+  clearStockForm(); stockMode = ''; $('kAgain').classList.add('hide');
+  $('s2').classList.add('hide'); $('s3').classList.add('hide'); $('s4').classList.add('hide'); $('s5').classList.add('hide'); $('s1').classList.remove('hide'); window.scrollTo(0, 0);
 }
 function closeApp() { try { liff.closeWindow(); } catch (e) { window.close(); } }
 

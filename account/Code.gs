@@ -44,6 +44,8 @@ function doPost(e) {
       case 'codPaid':    { const u = requireAdmin_(req.idToken); return json_(u.ok ? codPaid_(req.items, u.name) : u); }
       case 'codList':    { const u = requireAdmin_(req.idToken); return json_(u.ok ? codList_(req.month) : u); }
       case 'dash':       { const u = requireAdmin_(req.idToken); return json_(u.ok ? dash_(req.month) : u); }
+      case 'stockList':  return json_(stockList_());
+      case 'stockSave':  return json_(stockSave_(req));
       default:       return json_({ ok: false, error: 'unknown action' });
     }
   } catch (err) {
@@ -82,7 +84,7 @@ function readReceipt_(b64, mime, type) {
 
   const cfg = getConfig_();
   const cats = cfg.categories;
-  const prompt = type === 'sale' ?
+  const prompt = STOCK_PROMPTS[type] ? STOCK_PROMPTS[type] : type === 'sale' ?
     'You are reading, for bookkeeping, evidence of a sale by our shop YANG Haus (ยางเฮ้าส์ / lorcenter): a bank transfer slip received from a customer, a chat screenshot (Facebook/LINE) with an order, or a handwritten/typed bill. Return ONLY JSON with keys:\n' +
     'date (YYYY-MM-DD; Thai year พ.ศ. minus 543; empty if unreadable), ' +
     'IMPORTANT: our own shop is YANGHAUS / ยางเฮ้าส์ / บริษัท ตามโกล์บ จำกัด (phones 0811363332, 0811197855, 0811239924) — never return us as the customer. The customer is the BUYER/payer/recipient of goods. ' +
@@ -652,6 +654,290 @@ function geminiFetch_(key, body) {
     }
   }
   return best || res;
+}
+
+/* =====================================================================
+ * 🗃 สต๊อกยาง/ล้อ (เพิ่ม 2026-11-06)
+ * แท็บ: สินค้า (1 แถว/รหัส) · สต๊อกเคลื่อนไหว (ทุกการเข้า-ออก, จำนวน + เข้า / − ออก) · สต๊อกคงเหลือ (สูตร ห้ามพิมพ์)
+ * รหัส = ยี่ห้อ 2 ตัว + รุ่น 2 ตัว + เบอร์ ติดกัน: ยาง ATLANDER AX88 225/55R18 → ATAX2255518 · ล้อ KAYS K12 18x8.5 5x114.3 ดำ → KAK118855114BK
+ *   ไม่มีรุ่น → ยี่ห้อ 4 ตัวแรก + เบอร์ (DEES2656517) · ปี DOT ไม่อยู่ในรหัส (ช่อง E) · ชนกัน → รุ่น 3 ตัว → 4 ตัว → (ล้อ) เติม ET → -2, -3
+ * ===================================================================== */
+const TAB_PROD = 'สินค้า';
+const TAB_MOVE = 'สต๊อกเคลื่อนไหว';
+const STOCK_FOLDER_NAME = 'YANG Haus สต๊อก (รูป)';
+const MOVE_LABEL = { count: 'นับตั้งต้น', in: 'รับเข้า', out: 'ตัดออก' };
+
+const STOCK_PROMPTS = {
+  sidewall:
+    'You are reading ONE photo for stock counting: either a car TIRE sidewall or an alloy WHEEL (rim). Return ONLY JSON with keys:\n' +
+    'kind ("tire" | "wheel"), brand (as printed, uppercase, e.g. ATLANDER, MICHELIN, KAYS), model (tread pattern / wheel model as printed, e.g. AX88, PILOT SPORT 4, K12; empty if none), ' +
+    'size (tire: width/aspect R rim like 225/50R18 — keep ZR or LT if printed; wheel: diameter x width like 18x8.5), load_speed (tire load index + speed symbol e.g. 98W; empty if none), ' +
+    'dot (tire production date = the LAST 4 digits of the DOT serial, format WWYY, e.g. 2526 = week 25 of 2026; usually inside an oval at the end of "DOT ...."; empty if not visible — never guess), ' +
+    'pcd (wheel bolt pattern e.g. 5x114.3; empty for tire), et (wheel offset number e.g. 35 or -10; empty for tire), color (wheel colour, short Thai e.g. ดำ, ดำด้าน, เงิน, ไทเท, บรอนซ์, ขาว, กันเมทัล; empty for tire), confidence (0-1).',
+  stockbill:
+    'You are reading a Thai supplier delivery note / invoice / tax invoice for tires or wheels bought into stock by our shop YANG Haus (บริษัท ตามโกล์บ จำกัด — never return us as vendor). Return ONLY JSON with keys:\n' +
+    'doc_type (tax_invoice_original | tax_invoice_copy | delivery_note | receipt | other), date (YYYY-MM-DD; Thai year พ.ศ. minus 543), vendor (seller name, no address), tax_id (seller 13 digits, digits only), ' +
+    'invoice_no (document number), total (grand total number), is_tax_invoice (true if it is or references a ใบกำกับภาษี with VAT), ' +
+    'lines (array, one per product line: {kind ("tire"|"wheel"), brand, model, size (tire like 225/50R18, wheel like 18x8.5), pcd, et, color, qty (pieces), unit_price (price per piece INCLUDING VAT; if prices are before VAT and a VAT line is shown, multiply by 1.07), dot (4-digit WWYY only if printed, else empty)}), confidence (0-1).',
+  label:
+    'You are reading a Thai e-commerce SHIPPING LABEL (ใบปะหน้า) from Shopee, TikTok Shop, Lazada or a carrier (SPX, Flash, J&T, Kerry...) for a shop selling tires and wheels. Return ONLY JSON with keys:\n' +
+    'platform (Shopee | TikTok | Lazada | อื่นๆ), order_no (order number / หมายเลขคำสั่งซื้อ / Order ID), tracking (tracking / parcel number), customer (receiver name), date (YYYY-MM-DD if an order or ship date is printed, else empty), ' +
+    'lines (array, one per product line printed on the label: {sku (seller SKU / เลข SKU if printed, else empty), name (product name as printed, shortened), variation (ตัวเลือกสินค้า text if any), qty (quantity printed), ' +
+    'pieces (number of individual tires/wheels = qty × pieces per set when the name or variation says a set, e.g. "ชุด 4 เส้น", "4 วง", "set of 4" → qty×4; otherwise = qty), size (tire size like 225/50R18 or wheel size like 18x8.5 found in name/variation, else empty), brand (if found, else empty)}), confidence (0-1).'
+};
+
+/* ---------- รหัสสินค้า ---------- */
+const sNorm_ = s => String(s || '').toUpperCase().replace(/[^A-Z0-9ก-๙]/g, '');
+const sLatin_ = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+function brand2_(b) { const l = sLatin_(b); return l ? l.slice(0, 2) : (sNorm_(b).slice(0, 2) || 'XX'); }
+function tireSizeCode_(s) {
+  s = String(s || '').toUpperCase();
+  let m = /(\d{3})\s*\/\s*(\d{2})\s*Z?\s*R?\s*F?\s*(\d{2})/.exec(s);
+  if (m) return m[1] + m[2] + m[3];
+  m = /(\d{2})\s*[X×*]\s*(\d{1,2}(?:\.\d+)?)\s*R?\s*(\d{2})/.exec(s);   // LT 31x10.5R15
+  if (m) return m[1] + String(m[2]).replace('.', '') + m[3];
+  return sLatin_(s);
+}
+function wheelSizeCode_(s) {
+  const m = /(\d{2})\s*[xX×*]\s*(\d{1,2}(?:\.\d+)?)/.exec(String(s || ''));
+  return m ? m[1] + String(Math.round(Number(m[2]) * 10)) : sLatin_(s);
+}
+function pcdCode_(s) {
+  const m = /(\d)\s*[xXH×*\-\/]\s*(\d{3})/.exec(String(s || ''));
+  return m ? m[1] + m[2] : sLatin_(s);
+}
+function etCode_(s) {
+  const m = /(-?\d+)/.exec(String(s || '').replace(/\s/g, ''));
+  if (!m) return '';
+  const n = Number(m[1]);
+  return n < 0 ? 'ETN' + Math.abs(n) : 'ET' + n;
+}
+const COLOR_CODES = [['ดำด้าน', 'MBK'], ['MATTE BLACK', 'MBK'], ['ดำเงา', 'GBK'], ['GLOSS BLACK', 'GBK'], ['กันเมทัล', 'GM'], ['GUNMETAL', 'GM'], ['ไทเท', 'TI'], ['TITAN', 'TI'],
+  ['บรอนซ์', 'BZ'], ['BRONZE', 'BZ'], ['ขัดเงา', 'PL'], ['POLISH', 'PL'], ['โครม', 'CR'], ['CHROME', 'CR'], ['ดำ', 'BK'], ['BLACK', 'BK'], ['เงิน', 'SV'], ['SILVER', 'SV'],
+  ['ทอง', 'GD'], ['GOLD', 'GD'], ['ขาว', 'WH'], ['WHITE', 'WH'], ['เทา', 'GY'], ['GREY', 'GY'], ['GRAY', 'GY'], ['แดง', 'RD'], ['RED', 'RD'], ['น้ำเงิน', 'BL'], ['ฟ้า', 'BL'], ['BLUE', 'BL']];
+function colorCode_(s) {
+  const u = String(s || '').toUpperCase().trim();
+  if (!u) return '';
+  for (const [k, c] of COLOR_CODES) if (u.indexOf(k) >= 0) return c;
+  return sLatin_(u).slice(0, 3);
+}
+function isWheel_(kind) { return /wheel|ล้อ/i.test(String(kind || '')); }
+function prodParts_(p) {
+  const w = isWheel_(p.kind);
+  return w ? { w, b: brand2_(p.brand), m: sLatin_(p.model), sz: wheelSizeCode_(p.size), pcd: pcdCode_(p.pcd), et: etCode_(p.et), col: colorCode_(p.color) }
+           : { w, b: brand2_(p.brand), m: sLatin_(p.model), sz: tireSizeCode_(p.size) };
+}
+function makeCode_(p, mLen) {
+  const x = prodParts_(p);
+  const head = x.m ? x.b + x.m.slice(0, mLen || 2) : sLatin_(p.brand).slice(0, 4) || x.b;   // ไม่มีรุ่น → ยี่ห้อ 4 ตัวแรก (DEESTONE → DEES)
+  return x.w ? head + x.sz + x.pcd + x.col : head + x.sz;
+}
+function prodKey_(p) {
+  const x = prodParts_(p);
+  return [x.w ? 'W' : 'T', sNorm_(p.brand), sNorm_(p.model), x.sz, x.pcd || '', x.et || '', x.col || ''].join('|');
+}
+function fullName_(p) {
+  const m = /(-?\d+)/.exec(String(p.et || '').replace(/\s/g, ''));
+  const et = m ? 'ET' + Number(m[1]) : '';
+  return (isWheel_(p.kind) ? [p.brand, p.model, p.size, p.pcd, et, p.color] : [p.brand, p.model, p.size])
+    .map(s => String(s || '').trim()).filter(Boolean).join(' ');
+}
+
+/* ---------- อ่านชีท ---------- */
+function readProducts_(ss) {
+  const sh = ss.getSheetByName(TAB_PROD);
+  const last = nextRow_(sh) - 1;   // ไม่ใช้ getLastRow: คอลัมน์ J,K เป็นสูตร MAP ยาวทั้งคอลัมน์
+  if (last < 2) return [];
+  return sh.getRange(2, 1, last - 1, 9).getValues().map((r, i) => r[0] ? {
+    row: i + 2, code: String(r[0]).trim(), kind: isWheel_(r[1]) ? 'wheel' : 'tire', brand: String(r[2]), model: String(r[3]), size: String(r[4]),
+    pcd: String(r[5]), et: String(r[6]), color: String(r[7]), name: String(r[8] || '')
+  } : null).filter(Boolean);
+}
+function readMoves_(ss) {
+  const sh = ss.getSheetByName(TAB_MOVE);
+  const last = nextRow_(sh) - 1;
+  if (last < 2) return [];
+  return sh.getRange(2, 1, last - 1, 12).getValues().map((r, i) => ({
+    row: i + 2, date: r[0], type: String(r[1]), code: String(r[2]).trim(), dot: String(r[4]).trim(), qty: Number(r[5]) || 0, cost: Number(r[6]) || 0,
+    docNo: String(r[10]).trim(), tracking: String(r[11]).trim()
+  })).filter(m => m.code);
+}
+function balances_(moves) {
+  const b = {};
+  moves.forEach(m => {
+    const k = m.code + '|' + m.dot;
+    const x = b[k] || (b[k] = { code: m.code, dot: m.dot, qty: 0, inQty: 0, inVal: 0, first: null });
+    x.qty += m.qty;
+    if (m.qty > 0) {
+      if (m.cost > 0) { x.inQty += m.qty; x.inVal += m.qty * m.cost; }   // ต้นทุนเฉลี่ย: นับเฉพาะแถวที่ใส่ราคา
+      if (m.date instanceof Date && (!x.first || m.date < x.first)) x.first = m.date;
+    }
+  });
+  return b;
+}
+
+/* รายการสินค้า + คงเหลือ (ทุกคนดูได้) */
+function stockList_() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  if (!ss.getSheetByName(TAB_PROD) || !ss.getSheetByName(TAB_MOVE)) return { ok: false, error: 'ยังไม่มีแท็บ ' + TAB_PROD + ' / ' + TAB_MOVE + ' ในชีท' };
+  const prods = readProducts_(ss);
+  const byCode = {}; prods.forEach(p => byCode[p.code] = p);
+  const bal = balances_(readMoves_(ss));
+  const balances = Object.keys(bal).map(k => bal[k]).filter(x => Math.abs(x.qty) > 1e-9).map(x => {
+    const p = byCode[x.code] || {};
+    return { code: x.code, dot: x.dot, qty: x.qty, avgCost: x.inQty ? +(x.inVal / x.inQty).toFixed(2) : 0,
+      first: x.first ? Utilities.formatDate(x.first, 'Asia/Bangkok', 'yyyy-MM-dd') : '', name: p.name || x.code, kind: p.kind || 'tire', brand: p.brand || '', size: p.size || '' };
+  });
+  // เรียง: ประเภท → ยี่ห้อ → ขนาด → ปี DOT เก่าก่อน (ขายของเก่าก่อน)
+  const dotKey = d => /^\d{4}$/.test(d) ? d.slice(2) + d.slice(0, 2) : '9999';
+  balances.sort((a, b) => (a.kind + a.brand + a.size).localeCompare(b.kind + b.brand + b.size) || dotKey(a.dot).localeCompare(dotKey(b.dot)));
+  return { ok: true, products: prods.map(p => ({ code: p.code, kind: p.kind, brand: p.brand, model: p.model, size: p.size, pcd: p.pcd, et: p.et, color: p.color, name: p.name })), balances };
+}
+
+function stockFolder_(d) {
+  const props = PropertiesService.getScriptProperties();
+  let root = null;
+  const id = props.getProperty('STOCK_FOLDER_ID');
+  if (id) { try { root = DriveApp.getFolderById(id); } catch (e) { root = null; } }
+  if (!root) {
+    const it = DriveApp.getFoldersByName(STOCK_FOLDER_NAME);
+    root = it.hasNext() ? it.next() : DriveApp.createFolder(STOCK_FOLDER_NAME);
+    props.setProperty('STOCK_FOLDER_ID', root.getId());
+  }
+  return getOrCreate_(root, Utilities.formatDate(d, 'Asia/Bangkok', 'yyyy-MM'));
+}
+function savePic_(folder, b64, name) {
+  if (!b64) return '';
+  return folder.createFile(Utilities.newBlob(Utilities.base64Decode(b64), 'image/jpeg', name.replace(/[\\/:*?"<>|]/g, '') + '.jpg')).getUrl();
+}
+
+/* หา/สร้างรหัสสินค้า — key เดียวกัน = รหัสเดิม · รหัสชนกันแต่คนละสินค้า → ต่อท้าย -2, -3 */
+function findOrCreateProduct_(sh, prods, p, d) {
+  const key = prodKey_(p);
+  const hit = prods.find(x => prodKey_(x) === key);
+  if (hit) return { code: hit.code, name: hit.name || fullName_(hit), isNew: false };
+  const taken = c => prods.some(x => x.code.toUpperCase() === c.toUpperCase());
+  const tries = [makeCode_(p, 2), makeCode_(p, 3), makeCode_(p, 4)];   // ATAX… → ATAX8… → ATAX88…
+  if (isWheel_(p.kind) && etCode_(p.et)) {
+    // ล้อรุ่น/ขนาด/PCD/สีเดียวกัน ต่างแค่ออฟ → เติม ET ต่อท้าย KAK118855114BK40 (ก่อนขยายชื่อรุ่น)
+    const noEt = k => k.split('|').slice(0, 5).concat(k.split('|').slice(6)).join('|');
+    const hit = prods.find(x => x.code.toUpperCase() === tries[0].toUpperCase());
+    const etTry = tries[0] + etCode_(p.et).replace('ET', '');
+    if (hit && noEt(prodKey_(hit)) === noEt(key)) tries.unshift(etTry); else tries.push(etTry);
+  }
+  let code = tries.find(c => !taken(c));
+  if (!code) { let n = 2; const base = tries[0]; code = base + '-' + n; while (taken(code)) code = base + '-' + (++n); }
+  const name = fullName_(p);
+  const row = nextRow_(sh);
+  sh.getRange(row, 1, 1, 9).setValues([[code, isWheel_(p.kind) ? 'ล้อ' : 'ยาง', String(p.brand || '').trim().toUpperCase(), String(p.model || '').trim(), String(p.size || '').trim().toUpperCase(),
+    String(p.pcd || '').trim(), String(p.et || '').trim(), String(p.color || '').trim(), name]]);
+  sh.getRange(row, 7).setNumberFormat('@');
+  sh.getRange(row, 13).setValue(d).setNumberFormat('yyyy-mm-dd');
+  const np = { row, code, kind: isWheel_(p.kind) ? 'wheel' : 'tire', brand: String(p.brand || '').trim().toUpperCase(), model: String(p.model || '').trim(), size: String(p.size || '').trim().toUpperCase(),
+    pcd: String(p.pcd || '').trim(), et: String(p.et || '').trim(), color: String(p.color || '').trim(), name };
+  prods.push(np);
+  return { code, name, isNew: true };
+}
+
+/* บันทึกสต๊อก: mode count | in | out · items = [{code?, kind, brand, model, size, pcd, et, color, dot, qty, cost, cond, loc, image}] */
+function stockSave_(r) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(25000)) return { ok: false, error: 'มีคนกำลังบันทึกอยู่ ลองใหม่อีกครั้ง' };
+  try {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const shP = ss.getSheetByName(TAB_PROD), shM = ss.getSheetByName(TAB_MOVE);
+    if (!shP || !shM) return { ok: false, error: 'ยังไม่มีแท็บ ' + TAB_PROD + ' / ' + TAB_MOVE };
+    const mode = MOVE_LABEL[r.mode] ? r.mode : '';
+    if (!mode) return { ok: false, error: 'mode ไม่ถูกต้อง' };
+    const items = (r.items || []).filter(it => Number(it.qty));
+    if (!items.length) return { ok: false, error: 'ยังไม่มีรายการ' };
+    const d = parseDate_(r.date);
+    const docNo = String(r.docNo || '').trim(), tracking = String(r.tracking || '').trim().toUpperCase();
+    const moves = readMoves_(ss);
+    const U = s => String(s || '').trim().toUpperCase();
+
+    // กันซ้ำ: ตัดออก → เลขออเดอร์/เลขพัสดุเดิม · รับเข้า → เลขบิลเดิม
+    if (mode === 'out' && (docNo || tracking)) {
+      const m = moves.find(x => x.type === MOVE_LABEL.out && ((docNo && U(x.docNo) === U(docNo)) || (tracking && U(x.tracking) === tracking)));
+      if (m) return { ok: false, dup: true, where: TAB_MOVE + ' แถว ' + m.row + ' (ตัดสต๊อกออเดอร์/พัสดุนี้ไปแล้ว)' };
+    }
+    if (mode === 'in' && docNo) {
+      const m = moves.find(x => x.type === MOVE_LABEL.in && U(x.docNo) === U(docNo));
+      if (m) return { ok: false, dup: true, where: TAB_MOVE + ' แถว ' + m.row + ' (บิล ' + docNo + ' ลงสต๊อกแล้ว)' };
+    }
+
+    // ตรวจ DOT (ยาง): WWYY สัปดาห์ 01-53
+    for (const it of items) {
+      const dot = String(it.dot || '').trim();
+      if (dot && !/^(0[1-9]|[1-4]\d|5[0-3])\d{2}$/.test(dot)) return { ok: false, error: 'DOT "' + dot + '" ไม่ถูกต้อง — ต้องเป็นตัวเลข 4 หลัก สัปดาห์+ปี เช่น 2526' };
+    }
+
+    const folder = stockFolder_(d);
+    const ymd = Utilities.formatDate(d, 'Asia/Bangkok', 'yyyy-MM-dd');
+    const by = r.by || '';
+    let buyRow = 0, buyNote = '', docUrl = '';
+
+    // รับเข้าจากบิล + ลงแท็บซื้อด้วย (ใช้ระบบซื้อเดิม: กันซ้ำ/รอใบกำกับตัวจริง/เก็บรูปใน ส่งบัญชี)
+    if (mode === 'in' && r.alsoBuy) {
+      const sumQty = items.reduce((t, it) => t + Math.abs(Number(it.qty) || 0), 0);
+      const summary = items.map(it => fullName_(it) + ' x' + Math.abs(Number(it.qty))).join(', ').slice(0, 200);
+      const total = Number(r.billTotal) || items.reduce((t, it) => t + Math.abs(Number(it.qty) || 0) * (Number(it.cost) || 0), 0);
+      const res = saveRecord_({ type: 'buy', date: r.date, business: 'YANG Haus', vendor: r.party || '', invoiceNo: docNo, taxId: r.taxId || '', items: summary, qty: sumQty,
+        total, hasVat: !!r.hasVat, docType: r.docType || 'copy', image: r.docImage || '', mime: 'image/jpeg', note: 'เข้าสต๊อก', by, source: 'หน้าร้าน' });
+      if (res.ok) { buyRow = res.row; docUrl = res.photoUrl || ''; buyNote = res.markedOriginal ? 'ติ๊กใบกำกับตัวจริงที่แท็บซื้อแถว ' + res.row : 'ลงแท็บซื้อแถว ' + res.row; }
+      else if (res.dup) buyNote = 'แท็บซื้อมีบิลนี้แล้ว (' + res.where + ') ไม่ลงซ้ำ';
+      else return { ok: false, error: 'ลงแท็บซื้อไม่สำเร็จ: ' + (res.error || '') };
+    }
+    if (!docUrl && r.docImage) docUrl = savePic_(folder, r.docImage, ymd + '_' + MOVE_LABEL[mode] + '_' + (docNo || tracking || r.party || 'เอกสาร'));
+
+    const prods = readProducts_(ss);
+    const bal = balances_(moves);
+    const out = [], newCodes = [], warn = [];
+    let row = nextRow_(shM);
+    const now = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd HH:mm');
+    items.forEach((it, i) => {
+      let code, name;
+      if (mode === 'out') {
+        const p = prods.find(x => x.code === String(it.code || '').trim());
+        if (!p) { warn.push('ไม่พบรหัส ' + (it.code || '(ว่าง)') + ' — ข้าม'); return; }
+        code = p.code; name = p.name || fullName_(p);
+      } else {
+        const f = findOrCreateProduct_(shP, prods, it, d);
+        code = f.code; name = f.name; if (f.isNew) newCodes.push(code);
+      }
+      const dot = String(it.dot || '').trim();
+      const qtyAbs = Math.abs(Number(it.qty) || 0);
+      const b = bal[code + '|' + dot];
+      let cost = Number(it.cost) || '';
+      if (mode === 'out') {
+        cost = b && b.inQty ? +(b.inVal / b.inQty).toFixed(2) : '';
+        if (!b || b.qty < qtyAbs - 1e-9) warn.push(name + ' DOT ' + (dot || '-') + ' เหลือ ' + (b ? b.qty : 0) + ' แต่ตัด ' + qtyAbs + ' → ยอดติดลบ เช็คอีกที');
+      }
+      const pic = it.image ? savePic_(folder, it.image, ymd + '_' + code + '_' + (dot || 'nodot') + '_' + (i + 1)) : '';
+      const photos = [pic, docUrl].filter(Boolean).join(' | ');
+      const qty = mode === 'out' ? -qtyAbs : qtyAbs;
+      // A วันที่ B รายการ C รหัส D ชื่อ E DOT F จำนวน G ต้นทุน | H สูตร | I เหตุผล J คู่ค้า K เลขบิล L เลขพัสดุ M สภาพ N ที่เก็บ O รูป P ผู้บันทึก Q หมายเหตุ R เวลา
+      shM.getRange(row, 1, 1, 7).setValues([[d, MOVE_LABEL[mode], code, name, dot, qty, cost]]);
+      shM.getRange(row, 9, 1, 10).setValues([[r.reason || MOVE_LABEL[mode], r.party || '', docNo, tracking, it.cond || '', it.loc || '', photos, by, [r.note, it.note].filter(Boolean).join(' | '), now]]);
+      shM.getRange(row, 1).setNumberFormat('yyyy-mm-dd');
+      // อัปเดตยอดในหน่วยความจำ (กันเตือนผิดเมื่อมีหลายแถวรหัสเดียวกัน)
+      const k = code + '|' + dot, x = bal[k] || (bal[k] = { code, dot, qty: 0, inQty: 0, inVal: 0, first: d });
+      x.qty += qty; if (qty > 0 && Number(cost) > 0) { x.inQty += qty; x.inVal += qty * Number(cost); }
+      out.push({ row, code, name, dot, qty, cost, left: x.qty });
+      row++;
+    });
+    if (!out.length) return { ok: false, error: warn.join(' / ') || 'ไม่มีรายการที่บันทึกได้' };
+    return { ok: true, mode, label: MOVE_LABEL[mode], lines: out, newCodes, warn, buyRow, buyNote, docUrl };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* ทดสอบรหัสใน editor: เลือก testStockCode แล้วกด Run */
+function testStockCode() {
+  Logger.log(makeCode_({ kind: 'tire', brand: 'ATLANDER', model: 'AX88', size: '225/55R18' }));   // ATAX2255518
+  Logger.log(makeCode_({ kind: 'wheel', brand: 'KAYS', model: 'K12', size: '18x8.5', pcd: '5x114.3', et: '35', color: 'ดำ' }));
+  Logger.log(JSON.stringify(stockList_()).slice(0, 500));
 }
 
 /* ทดสอบใน editor: เลือก testConfig แล้วกด Run (ครั้งแรกจะขอสิทธิ์) */
