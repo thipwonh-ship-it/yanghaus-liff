@@ -343,7 +343,7 @@
 
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script>
-const PAGE_VERSION = '2026-11-09a';
+const PAGE_VERSION = '2026-11-09b';
 if ('serviceWorker' in navigator) { try { navigator.serviceWorker.register('sw.js'); } catch (e) {} }   // PWA: เพิ่มไปหน้าจอหลักได้
 const LIFF_ID = '2012109669-kGPX1UtI';
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxm5fuyVniisAk14alXdzSMDsvrf_iQ_lI6Ti6hDDPOs--PSsZMVabqC_OwOP7Paa0SWA/exec';
@@ -369,7 +369,7 @@ function setDoc(x) {
   docType = x;
   if (x === 'original' && type === 'buy') loadPendingBuy(); else { $('gMatch').classList.add('hide'); pendingBuy = []; }
   $('dCopy').classList.toggle('on', x === 'copy'); $('dOrig').classList.toggle('on', x === 'original');
-  $('dHint').textContent = x === 'original' ? 'ถ้าเลขที่ใบกำกับนี้เคยลงไว้แล้ว (จากใบส่งของ) ระบบจะไม่ลงซ้ำ แค่ติ๊ก "ตัวจริงรับแล้ว" + เก็บรูป' : 'ตัวจริงตามมาทีหลัง → ระบบติดสถานะ "รอใบกำกับตัวจริง" พอได้ตัวจริงค่อยถ่ายอีกครั้งด้วยปุ่มนี้';
+  $('dHint').textContent = x === 'original' ? 'ใส่วันที่ = วันที่ในใบกำกับ (ภาษีซื้อจะเข้าเดือนนั้น ส่วนต้นทุนยังอยู่เดือนที่รับของ) · ถ้าเลขที่นี้เคยลงไว้แล้วระบบไม่ลงซ้ำ แค่ติ๊ก "ตัวจริงรับแล้ว" · ใบกำกับรวบหลายใบส่งของ (JSM, ป.รุ่งเรือง) → ติ๊กแถวที่รวมแล้วยอดเท่าใบ' : 'ตัวจริงตามมาทีหลัง → ระบบติดสถานะ "รอใบกำกับตัวจริง" พอได้ตัวจริงค่อยถ่ายอีกครั้งด้วยปุ่มนี้';
 }
 function showAdmin(on) { ['tList', 'tSale', 'tDash'].forEach(id => $(id).classList.toggle('hide', !on)); }
 let img2B64 = '';

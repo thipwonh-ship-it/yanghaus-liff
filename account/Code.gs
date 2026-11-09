@@ -185,7 +185,8 @@ function saveRecord_(r) {
           const folder = getOrCreate_(getOrCreate_(DriveApp.getFolderById(FOLDER_ID), ym), SUB_VAT);
           url = folder.createFile(Utilities.newBlob(Utilities.base64Decode(r.image), r.mime || 'image/jpeg', ymd + '_ต้นฉบับ_' + invNo.replace(/[\\/:*?"<>|]/g, '') + '.jpg')).getUrl();
         }
-        sh.getRange(row, 17).setValue(true);
+        setCheckbox_(sh.getRange(row, 17), true);
+        sh.getRange(row, 18).setValue(d).setNumberFormat('yyyy-mm-dd');   // R วันที่ใบกำกับ
         const note = sh.getRange(row, 13).getValue();
         sh.getRange(row, 13).setValue([note, 'ต้นฉบับใบกำกับรับแล้ว ' + Utilities.formatDate(new Date(), 'Asia/Bangkok', 'd/M') + (url ? ' ' + url : '')].filter(Boolean).join(' | '));
         return { ok: true, markedOriginal: true, row: row, tab: sh.getName(), photoUrl: url };
@@ -220,6 +221,7 @@ function saveRecord_(r) {
     sh.getRange(row, 10, 1, 8).setValues([[invNo, Number(r.shipIn) || '', r.orderRef || '', [note, (hasVat && !gotOriginal) ? 'รอใบกำกับตัวจริง' : ''].filter(Boolean).join(' | '), photoUrl, r.taxId || '', r.source || '', gotOriginal]]);
     setCheckbox_(sh.getRange(row, 7), hasVat);        // G
     setCheckbox_(sh.getRange(row, 17), gotOriginal);  // Q
+    if (r.docType === 'original' && hasVat) sh.getRange(row, 18).setValue(d).setNumberFormat('yyyy-mm-dd');   // R วันที่ใบกำกับ = วันที่ในใบ
   } else {
     // A วันที่ B ธุรกิจ C ประเภท D รายละเอียด E ยอด F มีใบกำกับ | G,H สูตร | I ผู้ขาย J อ้างอิงออเดอร์ K หมายเหตุ L เลขใบกำกับ M เลขผู้เสียภาษี N รูป
     sh.getRange(row, 1, 1, 6).setValues([[d, r.business || 'YANG Haus', r.category || 'อื่นๆ', r.items || '', total, hasVat]]);
@@ -234,16 +236,37 @@ function saveRecord_(r) {
 }
 
 /* ---------- ซื้อ: ใบส่งของที่ยังรอใบกำกับตัวจริง (Q = FALSE, G = TRUE) ---------- */
+/* ชื่อซัพพลายเออร์บนใบ (JSM / JST / สาขา / ชื่อเต็ม) → ชื่อหลัก ตาม ตั้งค่า!O:P (ไม่พบ = คืนชื่อเดิม) */
+function vendorCanon_(name) {
+  const norm = x => String(x || '').replace(/\s+/g, '').toLowerCase();
+  const n = norm(name);
+  if (!n) return '';
+  const cache = CacheService.getScriptCache();
+  let map = cache.get('vendor_alias');
+  if (map) map = JSON.parse(map);
+  else {
+    const sh = SpreadsheetApp.openById(SHEET_ID).getSheetByName(TAB_CFG);
+    map = {};
+    sh.getRange(5, 15, 60, 2).getValues().forEach(r => { if (r[0] && r[1]) map[norm(r[0])] = String(r[1]).trim(); });
+    cache.put('vendor_alias', JSON.stringify(map), 600);
+  }
+  if (map[n]) return map[n];
+  for (const k in map) if (n.indexOf(k) >= 0 || k.indexOf(n) >= 0) return map[k];   // "บจก.เจสตาร์ไทร์ (JSM)" vs "JSM"
+  return String(name || '').trim();
+}
+
 function buyPending_(vendor) {
   const sh = SpreadsheetApp.openById(SHEET_ID).getSheetByName(TAB_BUY);
   const last = sh.getLastRow();
   if (last < 2) return { ok: true, items: [] };
   const v = sh.getRange(2, 1, last - 1, 17).getValues();
   const norm = x => String(x || '').replace(/\s+/g, '').toLowerCase();
+  const want = vendorCanon_(vendor);
   const items = [];
   v.forEach((row, i) => {
     if (!row[0] || row[6] !== true || row[16] === true) return;
-    const sameVendor = !vendor || norm(row[2]).indexOf(norm(vendor).slice(0, 6)) >= 0 || norm(vendor).indexOf(norm(row[2]).slice(0, 6)) >= 0;
+    const have = vendorCanon_(row[2]);
+    const sameVendor = !vendor || norm(have) === norm(want) || norm(row[2]).indexOf(norm(vendor).slice(0, 6)) >= 0 || norm(vendor).indexOf(norm(row[2]).slice(0, 6)) >= 0;
     items.push({ row: i + 2, date: row[0] instanceof Date ? Utilities.formatDate(row[0], 'Asia/Bangkok', 'yyyy-MM-dd') : String(row[0]),
       vendor: row[2], items: row[3], total: Number(row[5]) || 0, docNo: String(row[9] || ''), sameVendor: sameVendor });
   });
@@ -273,8 +296,10 @@ function buyMatch_(r) {
     const oldNo = String(cur[9] || '');
     sh.getRange(row, 10).setValue(invNo).setNumberFormat('@');
     if (r.taxId) sh.getRange(row, 15).setValue(String(r.taxId)).setNumberFormat('@');
-    if (r.invoiceDate) { sh.getRange(row, 1).setValue(new Date(r.invoiceDate + 'T00:00:00+07:00')).setNumberFormat('yyyy-mm-dd'); }
-    sh.getRange(row, 17).setValue(true);
+    // วันที่ใบกำกับ → คอลัมน์ R (ภาษีซื้อเข้าเดือนตามใบกำกับ) — ไม่ทับ A ซึ่งเป็นวันรับของ (ต้นทุน/กำไรอยู่เดือนที่รับของ)
+    // เช่น ป.รุ่งเรือง ส่งของ ต.ค. แต่สรุปยอด/ออกใบกำกับ พ.ย. → A = ต.ค., R = พ.ย.
+    if (r.invoiceDate) { sh.getRange(row, 18).setValue(new Date(r.invoiceDate + 'T00:00:00+07:00')).setNumberFormat('yyyy-mm-dd'); }
+    setCheckbox_(sh.getRange(row, 17), true);
     sh.getRange(row, 13).setValue([String(cur[12] || ''), (oldNo && oldNo !== invNo ? 'ใบส่งของ ' + oldNo : ''), 'ต้นฉบับใบกำกับรับแล้ว ' + Utilities.formatDate(new Date(), 'Asia/Bangkok', 'd/M') + (url ? ' ' + url : '')].filter(Boolean).join(' | '));
   });
   return { ok: true, count: rows.length, sum: sum, invoiceTotal: Number(r.total) || 0, diff: +(sum - (Number(r.total) || 0)).toFixed(2), photoUrl: url };
