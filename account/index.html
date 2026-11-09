@@ -28,6 +28,10 @@
   label{display:block;font-size:13px;color:#555;margin:10px 0 4px}
   input[type=text],input[type=number],input[type=date],select,textarea{width:100%;padding:11px;font-size:16px;border:1px solid var(--line);border-radius:8px;background:#fff}
   .row{display:flex;gap:10px}.row>*{flex:1}
+  .biz{display:flex;gap:8px;margin-top:6px}
+  .biz button{flex:1;padding:14px 4px;font-size:16px;font-weight:700;border:2px solid var(--line);border-radius:10px;background:#fff;color:#333}
+  .biz button.on{border-color:var(--navy);background:var(--navy);color:#fff}
+  .biz button.last{border-style:dashed;border-color:var(--navy)}
   .chk{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--line);border-radius:8px;margin-top:10px;font-size:16px}
   .chk input{width:22px;height:22px}
   .hint{font-size:13px;color:#666;margin-top:6px}
@@ -176,10 +180,12 @@
       <label>หมายเหตุ</label><input id="sNote" type="text">
     </div>
     <div id="gGen">
-    <div class="row">
-      <div><label>วันที่ในใบเสร็จ</label><input id="fDate" type="date"></div>
-      <div><label>ธุรกิจ</label><select id="fBiz"></select></div>
+    <div id="gBiz">
+      <label>ใบนี้เป็นของธุรกิจไหน <span class="hint" id="bizHint">(ต้องเลือกก่อนบันทึก)</span></label>
+      <div class="biz" id="bizBtns"></div>
+      <input id="fBiz" type="hidden">
     </div>
+    <label>วันที่ในใบเสร็จ</label><input id="fDate" type="date">
     <div class="row">
       <div style="flex:2"><label id="lVendor">ผู้ขาย / ร้าน</label><input id="fVendor" type="text" list="supList"><datalist id="supList"></datalist></div>
       <div><label>ซื้อจาก</label><select id="fSource"></select></div>
@@ -337,7 +343,7 @@
 
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script>
-const PAGE_VERSION = '2026-11-06u';
+const PAGE_VERSION = '2026-11-09a';
 if ('serviceWorker' in navigator) { try { navigator.serviceWorker.register('sw.js'); } catch (e) {} }   // PWA: เพิ่มไปหน้าจอหลักได้
 const LIFF_ID = '2012109669-kGPX1UtI';
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxm5fuyVniisAk14alXdzSMDsvrf_iQ_lI6Ti6hDDPOs--PSsZMVabqC_OwOP7Paa0SWA/exec';
@@ -400,8 +406,22 @@ async function init() {
   if (mode === 'paid') openPaid();
   if (/^stock/.test(mode || '')) openStock((mode.split('-')[1]) || 'count');   // ?mode=stock | stock-in | stock-out | stock-view
 }
+// ปุ่มเลือกธุรกิจ: ไม่มีค่าเริ่มต้น คนต้องกดเอง (เคยเป็น dropdown default YANG Haus → ทุกแถวกลายเป็น YANG Haus หมด)
+const BIZ_ICON = { 'YANG Haus': '🛞 ยาง (YANG Haus)', 'ปริ้นเตอร์': '🖨️ ปริ้นเตอร์', 'ส่วนกลาง': '🏢 ส่วนกลาง' };
+function fillBiz() {
+  const list = ((cfg && cfg.business && cfg.business.length) ? cfg.business : ['YANG Haus', 'ปริ้นเตอร์', 'ส่วนกลาง']);
+  const last = localStorage.getItem('yh_biz_last') || '';
+  $('bizBtns').innerHTML = list.map(b => `<button type="button" class="${b === last ? 'last' : ''}" onclick="pickBiz('${b.replace(/'/g, "\\'")}')">${BIZ_ICON[b] || b}</button>`).join('');
+  $('fBiz').value = '';
+}
+function pickBiz(b) {
+  $('fBiz').value = b;
+  [...$('bizBtns').children].forEach(x => x.classList.toggle('on', x.textContent === (BIZ_ICON[b] || b)));
+  $('bizHint').textContent = '';
+  localStorage.setItem('yh_biz_last', b);
+}
 function fillConfig() {
-  fill($('fBiz'), cfg.business, 'YANG Haus');
+  fillBiz();
   fill($('fCat'), cfg.categories, 'อื่นๆ');
   fill($('cCarrier'), cfg.carriers || ['Flash', 'NNP', 'อื่นๆ'], 'Flash');
   fill($('fSource'), cfg.sources || ['หน้าร้าน', 'Shopee', 'TikTok', 'Lazada', 'อื่นๆ'], 'หน้าร้าน');
@@ -423,7 +443,9 @@ function setType(t) {
   $('gExp').classList.toggle('hide', t === 'buy'); $('gBuy').classList.toggle('hide', t !== 'buy'); $('gQty').classList.toggle('hide', t !== 'buy'); $('gDoc').classList.toggle('hide', t !== 'buy');
   $('lVendor').textContent = t === 'buy' ? 'ซัพพลายเออร์' : 'ผู้ขาย / ร้าน';
   $('lItems').textContent = t === 'buy' ? 'สินค้า (รุ่น/ขนาด)' : 'รายละเอียด';
-  if (t === 'buy') $('fBiz').value = 'YANG Haus';
+  // ซื้อของมาขาย = ยาง/ล้อเท่านั้น → ล็อก YANG Haus ซ่อนปุ่ม · ค่าใช้จ่าย → ต้องกดเลือกเอง
+  $('gBiz').classList.toggle('hide', t === 'buy');
+  if (t === 'buy') $('fBiz').value = 'YANG Haus'; else fillBiz();
 }
 
 // กรอกเองไม่มีรูป (ค่าใช้จ่าย/ซื้อ/ขาย) — ข้าม AI
@@ -566,6 +588,7 @@ async function save() {
       return;
     }
   }
+  if (type !== 'buy' && !$('fBiz').value) { $('gBiz').scrollIntoView({ behavior: 'smooth', block: 'center' }); return show('กดเลือกก่อนว่าใบนี้เป็นของ ยาง / ปริ้นเตอร์ / ส่วนกลาง', 'err'); }
   if (!total) return show('ใส่ยอดรวมก่อนค่ะ', 'err');
   if (!$('fDate').value) return show('ใส่วันที่ก่อนค่ะ', 'err');
   $('btnSave').disabled = true; show('<span class="spin"></span>กำลังบันทึก + เก็บรูปลง Drive…', '');
@@ -1107,7 +1130,7 @@ function reset() {
    'sCust', 'sPhone', 'sProv', 'sItems', 'sAmount', 'sQty', 'sInvNo', 'sShip', 'sRef', 'sNote'].forEach(i => $(i).value = '');
   $('sPaid').checked = true; $('sInv').value = 'ไม่ออก'; $('sDate').value = today();
   $('cPaid').checked = true; $('cHasVat').checked = false; $('cDate').value = today(); $('cHint').textContent = ''; $('cPaidSum').textContent = '';
-  $('fVat').checked = false; $('fDate').value = today(); if (cfg) $('fSource').value = 'หน้าร้าน'; pendingBuy = []; $('gMatch').classList.add('hide'); setDoc('copy'); $('vatCalc').textContent = ''; $('vatNote').classList.add('hide');
+  $('fVat').checked = false; $('fDate').value = today(); if (cfg) $('fSource').value = 'หน้าร้าน'; if (type !== 'buy') { fillBiz(); $('bizHint').textContent = '(ต้องเลือกก่อนบันทึก)'; } pendingBuy = []; $('gMatch').classList.add('hide'); setDoc('copy'); $('vatCalc').textContent = ''; $('vatNote').classList.add('hide');
   clearStockForm(); stockMode = ''; $('kAgain').classList.add('hide');
   $('s2').classList.add('hide'); $('s3').classList.add('hide'); $('s4').classList.add('hide'); $('s5').classList.add('hide'); $('s1').classList.remove('hide'); window.scrollTo(0, 0);
 }

@@ -43,7 +43,7 @@ function doPost(e) {
       case 'codPending': { const u = requireAdmin_(req.idToken); return json_(u.ok ? codPending_() : u); }
       case 'codPaid':    { const u = requireAdmin_(req.idToken); return json_(u.ok ? codPaid_(req.items, u.name) : u); }
       case 'codList':    { const u = requireAdmin_(req.idToken); return json_(u.ok ? codList_(req.month) : u); }
-      case 'dash':       { const u = requireAdmin_(req.idToken); return json_(u.ok ? dash_(req.month) : u); }
+      case 'dash':       { const u = requireAdmin_(req.idToken); return json_(u.ok ? dash_(req.month, req.biz) : u); }
       case 'stockList':  return json_(stockList_());
       case 'stockSave':  return json_(stockSave_(req));
       default:       return json_({ ok: false, error: 'unknown action' });
@@ -159,6 +159,12 @@ function saveRecord_(r) {
   if (r.type === 'cod') return saveCod_(ss, r);
   if (r.type === 'sale') { const u = requireAdmin_(r.idToken); if (!u.ok) return u; return saveSale_(ss, r); }
   const isBuy = r.type === 'buy';
+  // ธุรกิจ: ซื้อของมาขาย = YANG Haus เสมอ · ค่าใช้จ่ายต้องระบุและต้องอยู่ในรายการ ตั้งค่า!A (ไม่มี default — กันหน้าเก่าที่ยัง cache ส่งค่าว่าง/ค่าเก่ามา)
+  if (isBuy) r.business = 'YANG Haus';
+  else {
+    const allowed = getConfig_().business;
+    if (!r.business || allowed.indexOf(r.business) < 0) return { ok: false, error: 'ต้องเลือกธุรกิจ (' + allowed.join(' / ') + ') — ถ้าไม่เห็นปุ่มให้ปิดหน้าแล้วเปิดใหม่' };
+  }
   const sh = ss.getSheetByName(isBuy ? TAB_BUY : TAB_EXP);
   const d = parseDate_(r.date);
   const total = Number(r.total) || 0;
@@ -338,7 +344,7 @@ function codList_(month) {
 }
 
 /* ---------- Dashboard รายจ่ายรายเดือน (เฉพาะ COD_ADMINS) — อ่านอย่างเดียว ไม่แก้ชีท ---------- */
-function dash_(month) {
+function dash_(month, biz) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const fmt = (d, p) => d instanceof Date ? Utilities.formatDate(d, 'Asia/Bangkok', p) : '';
   const num = x => Number(x) || 0;
@@ -348,7 +354,9 @@ function dash_(month) {
 
   // ซื้อ: A วันที่ C ซัพพลายเออร์ D สินค้า E จำนวน F ยอดรวม G มีใบกำกับ I VAT J เลขใบกำกับ K ขนส่งเข้า M หมายเหตุ N รูป Q ตัวจริงรับแล้ว
   const buy = { rows: [], total: 0, vat: 0, qty: 0, shipIn: 0, byVendor: {}, pendingOriginal: 0 };
-  const isYH = b => /yang\s*haus|ยางเฮ้าส์/i.test(String(b || ''));   // dashboard นี้ของ YANG Haus เท่านั้น (ชีทมีธุรกิจอื่นปนอยู่)
+  // กรองธุรกิจ: biz = 'YANG Haus' | 'ปริ้นเตอร์' | 'ส่วนกลาง' | '' (รวมทุกธุรกิจ) · ไม่ส่งมา (หน้าเก่า) = YANG Haus เหมือนเดิม
+  biz = biz === undefined || biz === null ? 'YANG Haus' : String(biz);
+  const isYH = b => !biz || (biz === 'YANG Haus' ? /yang\s*haus|ยางเฮ้าส์/i.test(String(b || '')) : String(b || '').trim() === biz);
   const sb = ss.getSheetByName(TAB_BUY);
   if (sb.getLastRow() >= 2) {
     sb.getRange(2, 1, sb.getLastRow() - 1, 17).getValues().forEach((r, i) => {
@@ -404,15 +412,16 @@ function dash_(month) {
     });
   }
 
-  // COD: ใช้ codList_ (เดือนที่ส่ง) + ค้างรับทั้งหมดทุกเดือน
-  const cod = codList_(month);
+  // COD: ใช้ codList_ (เดือนที่ส่ง) + ค้างรับทั้งหมดทุกเดือน — COD มีแต่ของ YANG Haus → ธุรกิจอื่นแสดง 0
+  const codOnly = !biz || biz === 'YANG Haus';
+  const cod = codOnly ? codList_(month) : { items: [], months: [], total: 0, paidCount: 0, paidSum: 0, pendingSum: 0 };
   cod.months.forEach(m => months[m] = true);
-  const pendAll = codPending_();
+  const pendAll = codOnly ? codPending_() : { items: [], total: 0 };
 
   // ค่าส่ง + ค่าธรรมเนียม COD (รายจ่าย) จากแท็บ COD: A วันที่ B ขนส่ง C เลขพัสดุ D ลูกค้า G ค่าส่ง H COD fee I VAT Q หมายเหตุ (จ่ายต้นทาง / ขนส่งหัก)
   const codCost = { rows: [], freight: 0, fee: 0, vat: 0, total: 0, paidNow: 0, deducted: 0, byCarrier: {} };
   const sc = ss.getSheetByName(TAB_COD);
-  if (sc.getLastRow() >= 2) {
+  if (codOnly && sc.getLastRow() >= 2) {
     sc.getRange(2, 1, sc.getLastRow() - 1, 17).getValues().forEach((r, i) => {
       if (!r[0] || !r[2]) return;
       if (fmt(r[0], 'yyyy-MM') !== month) return;
@@ -430,7 +439,7 @@ function dash_(month) {
   const sortRows = a => a.sort((x, y) => x.row < y.row ? 1 : -1);
   sortRows(buy.rows); sortRows(exp.rows); sortRows(inc.rows); sortRows(codCost.rows);
   const top = o => Object.keys(o).map(k => ({ name: k, total: o[k] })).sort((a, b) => b.total - a.total);
-  return { ok: true, month: month, months: Object.keys(months).sort().reverse(),
+  return { ok: true, month: month, biz: biz, months: Object.keys(months).sort().reverse(),
     inc: { rows: inc.rows, total: inc.total, paid: inc.paid, qty: inc.qty, count: inc.rows.length, groups: inc.groups, byCustomer: top(inc.byCustomer).slice(0, 8) },
     buy: { rows: buy.rows, total: buy.total, vat: buy.vat, qty: buy.qty, shipIn: buy.shipIn, count: buy.rows.length, byVendor: top(buy.byVendor), pendingOriginal: buy.pendingOriginal },
     exp: { rows: exp.rows, total: exp.total, vat: exp.vat, count: exp.rows.length, byCat: top(exp.byCat) },

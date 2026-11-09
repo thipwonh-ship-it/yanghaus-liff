@@ -62,7 +62,8 @@
 </head>
 <body>
 <header>
-  <b>📊 YANG Haus</b>
+  <b>📊</b>
+  <select id="biz" onchange="load($('month').value)"><option value="YANG Haus">🛞 ยาง</option><option value="ปริ้นเตอร์">🖨️ ปริ้นเตอร์</option><option value="ส่วนกลาง">🏢 ส่วนกลาง</option><option value="">รวมทุกธุรกิจ</option></select>
   <select id="month" onchange="load(this.value)"></select>
 </header>
 <main>
@@ -181,7 +182,8 @@ async function init() {
 
 async function load(month) {
   $('status').classList.remove('hide'); $('status').innerHTML = '<span class="spin"></span>กำลังโหลด…';
-  const r = await post({ action: 'dash', idToken, month: month || '' });
+  const biz = $('biz').value;   // '' = รวมทุกธุรกิจ
+  const r = await post({ action: 'dash', idToken, month: month || '', biz });
   if (!r.ok) { $('status').innerHTML = '<div class="alert">' + esc(r.error || 'โหลดไม่สำเร็จ') + '</div>'; return; }
   data = r;
   try { localStorage.setItem('yh_dash_month', r.month); } catch (e) {}
