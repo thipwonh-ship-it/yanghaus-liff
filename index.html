@@ -38,7 +38,8 @@
 <body>
 <h2>📦 ส่งของที่สาขา</h2>
 <div class="small" id="who">กำลังเชื่อม LINE…</div>
-<div class="small" style="color:#999">เวอร์ชัน v3 (2026-11-09 13:20)</div>
+<div class="small" style="color:#999">เวอร์ชัน v4 (2026-11-09 13:25)</div>
+<div id="dbg" class="small" style="background:#fffde7;border:1px solid #fbc02d;border-radius:6px;padding:6px;margin-top:6px;max-height:110px;overflow:auto;font-family:monospace;font-size:11px;white-space:pre-wrap"></div>
 <div class="small" style="background:#fff;border-radius:8px;padding:10px;margin-top:10px;line-height:1.6">
 <b>ขั้นตอน:</b> ① ถ่ายรูปสินค้าทีละชิ้น <b>เข้าใกล้ให้ใบปะหน้าเต็มจอ</b> (ระบบอ่านเลขให้เอง) → ② ตอบว่าขนส่งยิงรับหรือยัง → ③ ถ่ายรูปสุดท้าย 1 รูป → ④ บันทึก
 </div>
@@ -112,6 +113,10 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkkLIG7UicPi3G9x189PN7
 // ===================================
 
 let profile = null, pos = null;
+function dbg(t){ const d=document.getElementById('dbg'); d.textContent += new Date().toTimeString().slice(0,8)+' '+t+'\n'; d.scrollTop=d.scrollHeight; }
+window.addEventListener('error', e=>dbg('ERR '+(e.message||e)+' @'+(e.lineno||'')));
+window.addEventListener('unhandledrejection', e=>dbg('REJ '+(e.reason&&e.reason.message||e.reason)));
+dbg('หน้าโหลด iOS='+/iPhone|iPad/.test(navigator.userAgent)+' BD='+('BarcodeDetector' in window));
 
 async function main(){
   await liff.init({liffId: LIFF_ID});
@@ -154,10 +159,12 @@ function preview(inputId, boxId, arr, cntId){
   }
   document.getElementById(inputId).addEventListener('change', async e=>{
     const picked=[...e.target.files]; e.target.value='';
+    dbg(inputId+' ได้ไฟล์ '+picked.length+' '+picked.map(f=>Math.round(f.size/1024)+'KB '+f.type).join(', '));
     document.querySelectorAll('.scanbtn').forEach(b=>b.disabled=true);
     try{
     for(const f of picked){
       let code='';
+      dbg('เริ่มตรวจ '+f.name);
       if(inputId==='photo1'){
         try{ code = await withTimeout(checkLabelPhoto(f),40000); }
         catch(e){ document.getElementById('msg').textContent='❌ เครื่องประมวลผลรูปนานเกินไป ถ่ายใหม่อีกครั้ง'; continue; }
@@ -165,12 +172,14 @@ function preview(inputId, boxId, arr, cntId){
         if(arr.some(x=>x.label===code)){ document.getElementById('msg').textContent='⚠️ รูปซ้ำ เลข '+code+' มีแล้ว ไม่เก็บรูปนี้'; continue; } }
       f.group = inputId==='photo1' ? 'item' : 'receipt';
       f.label = code===true ? '' : code;
+      dbg('อ่านได้ '+(code===true?'(ไม่ต้องอ่าน)':code));
       f.thumb = await makeThumb(f);
       f.upload = uploadNow(f); // อัปโหลดเบื้องหลังทันที
       arr.push(f);
     }
     render();
-    }finally{ document.querySelectorAll('.scanbtn').forEach(b=>b.disabled=false); }
+    }catch(err){ dbg('ERR ใน handler: '+(err&&err.message||err)); }
+    finally{ document.querySelectorAll('.scanbtn').forEach(b=>b.disabled=false); }
     nextStepHint();
   });
 }
@@ -244,10 +253,12 @@ async function uploadNow(f){
   pendingUploads++; upStatus();
   try{
     const data = await shrink(f);
+    dbg('อัปโหลด '+(f.label||f.group)+' '+Math.round(data.length/1024)+'KB');
     const r = await fetch(GAS_URL,{method:'POST',body:JSON.stringify({action:'upload', group:f.group, label:f.label||'', carrier:document.getElementById('carrier').value, data}), signal:AbortSignal.timeout?AbortSignal.timeout(60000):undefined});
     const j = await r.json(); if(!j.ok) throw new Error(j.error);
+    dbg('อัปโหลดเสร็จ '+(f.label||f.group));
     return j.url;
-  }catch(e){ f.failed=true; return null; }
+  }catch(e){ dbg('อัปโหลดพัง '+(e&&e.message||e)); f.failed=true; return null; }
   finally{ pendingUploads--; upStatus(); }
 }
 preview('photo1','prev1',files1,'cnt1'); preview('photo2','prev2',files2); preview('photo3','prev3',files3);
@@ -296,6 +307,7 @@ function saveLast(carrier, branch){ try{ localStorage.setItem(LAST_KEY, JSON.str
 restoreLast();
 
 async function openCam(id, gallery){
+  dbg('กดปุ่ม '+id+(gallery?' คลังรูป':' กล้อง'));
   if(scanning){ try{ await scanner.stop(); }catch(_){} document.getElementById('scanner').classList.remove('on'); scanning=false; document.getElementById('scanBtn').textContent='📷 อ่านไม่ติด? สแกนบาร์โค้ดด้วยกล้อง'; }
   const inp=document.getElementById(id);
   // iPhone: ถ้ามี capture จะเปิดกล้องอย่างเดียว → ปุ่มคลังรูปเอา capture ออก
