@@ -147,6 +147,13 @@ function readReceipt_(b64, mime, type) {
 }
 
 /* ---------- save: เก็บรูปลง Drive + เขียนแถวลงชีต ---------- */
+/* เขียน boolean ลงเซลล์ให้เป็น checkbox จริง — ถ้าเซลล์เคยถูกตั้ง Plain text ไว้ boolean จะกลายเป็นข้อความ "true" และสูตร VAT (G=TRUE) จะไม่ทำงาน */
+function setCheckbox_(rng, val) {
+  rng.setNumberFormat('General');
+  rng.setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
+  rng.setValue(val === true);
+}
+
 function saveRecord_(r) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   if (r.type === 'cod') return saveCod_(ss, r);
@@ -201,14 +208,17 @@ function saveRecord_(r) {
   const row = nextRow_(sh);
   const note = [r.note, r.by ? 'จดผ่านไลน์: ' + r.by : ''].filter(Boolean).join(' | ');
   if (isBuy) {
-    // A วันที่ B ธุรกิจ C ซัพพลายเออร์ D สินค้า E จำนวน F ยอดรวม G มีใบกำกับ | H,I สูตร | J เลขใบกำกับ K ขนส่งเข้า L อ้างอิงออเดอร์ M หมายเหตุ N รูป O เลขผู้เสียภาษี
+    // A วันที่ B ธุรกิจ C ซัพพลายเออร์ D สินค้า E จำนวน F ยอดรวม G มีใบกำกับ | H,I สูตร | J เลขใบกำกับ K ขนส่งเข้า L อ้างอิงออเดอร์ M หมายเหตุ N รูป O เลขผู้เสียภาษี P ซื้อจาก Q ใบกำกับตัวจริงรับแล้ว
     sh.getRange(row, 1, 1, 7).setValues([[d, r.business || 'YANG Haus', r.vendor || '', r.items || '', Number(r.qty) || '', total, hasVat]]);
     const gotOriginal = r.docType === 'original' || !hasVat;
     sh.getRange(row, 10, 1, 8).setValues([[invNo, Number(r.shipIn) || '', r.orderRef || '', [note, (hasVat && !gotOriginal) ? 'รอใบกำกับตัวจริง' : ''].filter(Boolean).join(' | '), photoUrl, r.taxId || '', r.source || '', gotOriginal]]);
+    setCheckbox_(sh.getRange(row, 7), hasVat);        // G
+    setCheckbox_(sh.getRange(row, 17), gotOriginal);  // Q
   } else {
     // A วันที่ B ธุรกิจ C ประเภท D รายละเอียด E ยอด F มีใบกำกับ | G,H สูตร | I ผู้ขาย J อ้างอิงออเดอร์ K หมายเหตุ L เลขใบกำกับ M เลขผู้เสียภาษี N รูป
     sh.getRange(row, 1, 1, 6).setValues([[d, r.business || 'YANG Haus', r.category || 'อื่นๆ', r.items || '', total, hasVat]]);
     sh.getRange(row, 9, 1, 7).setValues([[r.vendor || '', r.orderRef || '', note, invNo, r.taxId || '', photoUrl, r.source || '']]);
+    setCheckbox_(sh.getRange(row, 6), hasVat);        // F
   }
   sh.getRange(row, 1).setNumberFormat('yyyy-mm-dd');
   if (invNo) sh.getRange(row, isBuy ? 10 : 12).setNumberFormat('@');
