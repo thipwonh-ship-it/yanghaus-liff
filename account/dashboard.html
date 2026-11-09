@@ -106,13 +106,13 @@
     <!-- ===== รายจ่าย ===== -->
     <div id="vExp">
     <div class="kpis">
-      <div class="kpi" style="--c:var(--buy)"><small>🛞 ซื้อมาขาย</small><b id="kBuy">0</b><i id="kBuyN"></i></div>
+      <div class="kpi yh" style="--c:var(--buy)"><small>🛞 ซื้อมาขาย</small><b id="kBuy">0</b><i id="kBuyN"></i></div>
       <div class="kpi" style="--c:var(--exp)"><small>💸 ค่าใช้จ่าย</small><b id="kExp">0</b><i id="kExpN"></i></div>
-      <div class="kpi" style="--c:var(--cod)"><small>📦 ค่าส่ง+fee COD</small><b id="kCodX">0</b><i id="kCodXN"></i></div>
+      <div class="kpi yh" style="--c:var(--cod)"><small>📦 ค่าส่ง+fee COD</small><b id="kCodX">0</b><i id="kCodXN"></i></div>
     </div>
 
     <!-- ซื้อมาขาย -->
-    <div class="card" style="--c:var(--buy)">
+    <div class="card yh" style="--c:var(--buy)">
       <h2>🛞 สินค้าซื้อมาขาย <span id="bSub"></span></h2>
       <div id="bAlert" class="alert hide"></div>
       <div id="bVendors"></div>
@@ -129,7 +129,7 @@
     </div>
 
     <!-- ค่าส่ง + ค่าธรรมเนียม COD (รายจ่าย) -->
-    <div class="card" style="--c:var(--cod)">
+    <div class="card yh" style="--c:var(--cod)">
       <h2>📦 ค่าส่ง + ค่าธรรมเนียม COD <span id="xSub"></span></h2>
       <div class="hint" id="xHint" style="margin:0 0 8px"></div>
       <div id="xCarrier"></div>
@@ -144,7 +144,7 @@
 
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script>
-const PAGE_VERSION = '2026-11-02d';
+const PAGE_VERSION = '2026-11-09a';
 let view = 'exp';
 function setView(v) {
   view = v;
@@ -187,6 +187,11 @@ async function load(month) {
   if (!r.ok) { $('status').innerHTML = '<div class="alert">' + esc(r.error || 'โหลดไม่สำเร็จ') + '</div>'; return; }
   data = r;
   try { localStorage.setItem('yh_dash_month', r.month); } catch (e) {}
+  // ปริ้นเตอร์ / ส่วนกลาง ไม่มีซื้อมาขาย-COD-รายรับ → ซ่อนการ์ดเหล่านั้น เหลือค่าใช้จ่ายอย่างเดียว
+  const yhOnly = !biz || biz === 'YANG Haus';
+  document.querySelectorAll('.yh').forEach(el => el.classList.toggle('hide', !yhOnly));
+  $('tabInc').classList.toggle('hide', !yhOnly);
+  if (!yhOnly) setView('exp');
   // เดือน dropdown
   const ms = r.months.includes(r.month) ? r.months : [r.month].concat(r.months);
   $('month').innerHTML = ms.map(x => `<option value="${x}" ${x === r.month ? 'selected' : ''}>${thMonth(x)}</option>`).join('');
