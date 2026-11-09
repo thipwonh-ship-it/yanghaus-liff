@@ -38,6 +38,7 @@
 <body>
 <h2>📦 ส่งของที่สาขา</h2>
 <div class="small" id="who">กำลังเชื่อม LINE…</div>
+<div class="small" style="color:#999">เวอร์ชัน v3 (2026-11-09 13:20)</div>
 <div class="small" style="background:#fff;border-radius:8px;padding:10px;margin-top:10px;line-height:1.6">
 <b>ขั้นตอน:</b> ① ถ่ายรูปสินค้าทีละชิ้น <b>เข้าใกล้ให้ใบปะหน้าเต็มจอ</b> (ระบบอ่านเลขให้เอง) → ② ตอบว่าขนส่งยิงรับหรือยัง → ③ ถ่ายรูปสุดท้าย 1 รูป → ④ บันทึก
 </div>
@@ -136,14 +137,19 @@ function ask(text, okLabel){
   });
 }
 
+// ทำ thumbnail 200px (iPhone: รูปเต็ม 4000px ใน <img> กินแรมมาก)
+function makeThumb(file){ return new Promise(res=>{ const i=new Image(); const u=URL.createObjectURL(file);
+  i.onload=()=>{ const sc=Math.min(1,200/Math.max(i.width,i.height)); const c=document.createElement('canvas'); c.width=i.width*sc; c.height=i.height*sc;
+    c.getContext('2d').drawImage(i,0,0,c.width,c.height); const d=c.toDataURL('image/jpeg',0.7); c.width=c.height=0; URL.revokeObjectURL(u); res(d); };
+  i.onerror=()=>{ URL.revokeObjectURL(u); res(''); }; i.src=u; }); }
 // สะสมรูปทีละใบ (กดถ่ายเพิ่มได้เรื่อยๆ แตะรูปเพื่อลบ)
 const files1=[], files2=[], files3=[];
 function preview(inputId, boxId, arr, cntId){
   const box=document.getElementById(boxId);
   function render(){
     box.innerHTML='';
-    arr.forEach((f,i)=>{ const img=document.createElement('img'); f.url=f.url||URL.createObjectURL(f); img.src=f.url;
-      img.onclick=async()=>{ if(await ask('ลบรูปนี้?'+(f.label?'\n(เลข '+f.label+' จะถูกลบด้วย)':''),'ลบ')){ arr.splice(i,1); if(f.label) removeCode(f.label); try{URL.revokeObjectURL(f.url)}catch(_){} render(); } }; box.appendChild(img); });
+    arr.forEach((f,i)=>{ const img=document.createElement('img'); img.src=f.thumb||'';
+      img.onclick=async()=>{ if(await ask('ลบรูปนี้?'+(f.label?'\n(เลข '+f.label+' จะถูกลบด้วย)':''),'ลบ')){ arr.splice(i,1); if(f.label) removeCode(f.label); render(); } }; box.appendChild(img); });
     if(cntId) document.getElementById(cntId).textContent = arr.length ? `${arr.length} รูป` : '';
   }
   document.getElementById(inputId).addEventListener('change', async e=>{
@@ -159,6 +165,7 @@ function preview(inputId, boxId, arr, cntId){
         if(arr.some(x=>x.label===code)){ document.getElementById('msg').textContent='⚠️ รูปซ้ำ เลข '+code+' มีแล้ว ไม่เก็บรูปนี้'; continue; } }
       f.group = inputId==='photo1' ? 'item' : 'receipt';
       f.label = code===true ? '' : code;
+      f.thumb = await makeThumb(f);
       f.upload = uploadNow(f); // อัปโหลดเบื้องหลังทันที
       arr.push(f);
     }
