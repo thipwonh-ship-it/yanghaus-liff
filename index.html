@@ -24,6 +24,9 @@
   .radio label{font-weight:400;margin:6px 0;display:flex;align-items:center;gap:8px;background:#fff;padding:10px;border:1px solid #ccc;border-radius:8px}
   .radio input{width:auto}
   .chip{display:inline-block;background:#e8f5e9;color:#1b5e20;padding:4px 10px;border-radius:14px;margin:4px 4px 0 0;font-size:14px}
+.askbg{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:99;padding:20px}
+.askbox{background:#fff;border-radius:12px;padding:18px;width:100%;max-width:360px;font-size:16px}
+.askbox button{margin-top:8px}.askbox .no{background:#eee;color:#333}
 .galbtn{background:#fff!important;color:#1a73e8!important;border:2px solid #1a73e8!important;font-size:14px;padding:8px;margin-top:6px}
 </style>
 </head>
@@ -109,14 +112,23 @@ async function main(){
   if(!liff.isLoggedIn()){ liff.login(); return; }
   profile = await liff.getProfile();
   document.getElementById('who').textContent = 'ผู้ส่ง: ' + profile.displayName;
+  document.getElementById('send').disabled = false; // iPhone: ไม่รอ GPS (popup ค้างแล้วปุ่มไม่ติด)
   navigator.geolocation.getCurrentPosition(p=>{
     pos = {lat:p.coords.latitude, lng:p.coords.longitude};
     document.getElementById('gps').textContent = `📍 ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`;
-    document.getElementById('send').disabled = false;
   }, ()=>{
     document.getElementById('gps').textContent = '📍 ไม่ได้ตำแหน่ง (กรุณาอนุญาต Location)';
-    document.getElementById('send').disabled = false;
   }, {enableHighAccuracy:true, timeout:10000});
+}
+// LINE บน iPhone ไม่แสดง confirm() → ใช้กล่องถามในหน้าเอง
+function ask(text, okLabel){
+  return new Promise(res=>{
+    const bg=document.createElement('div'); bg.className='askbg';
+    bg.innerHTML=`<div class="askbox"><div style="white-space:pre-line;margin-bottom:14px">${text}</div><button type="button" class="ok">${okLabel||'ตกลง'}</button><button type="button" class="no">ยกเลิก</button></div>`;
+    bg.querySelector('.ok').onclick=()=>{bg.remove();res(true)};
+    bg.querySelector('.no').onclick=()=>{bg.remove();res(false)};
+    document.body.appendChild(bg);
+  });
 }
 
 // สะสมรูปทีละใบ (กดถ่ายเพิ่มได้เรื่อยๆ แตะรูปเพื่อลบ)
@@ -125,8 +137,8 @@ function preview(inputId, boxId, arr, cntId){
   const box=document.getElementById(boxId);
   function render(){
     box.innerHTML='';
-    arr.forEach((f,i)=>{ const img=document.createElement('img'); img.src=URL.createObjectURL(f);
-      img.onclick=()=>{ if(confirm('ลบรูปนี้?'+(f.label?'\n(เลข '+f.label+' จะถูกลบด้วย)':''))){ arr.splice(i,1); if(f.label) removeCode(f.label); render(); } }; box.appendChild(img); });
+    arr.forEach((f,i)=>{ const img=document.createElement('img'); f.url=f.url||URL.createObjectURL(f); img.src=f.url;
+      img.onclick=async()=>{ if(await ask('ลบรูปนี้?'+(f.label?'\n(เลข '+f.label+' จะถูกลบด้วย)':''),'ลบ')){ arr.splice(i,1); if(f.label) removeCode(f.label); try{URL.revokeObjectURL(f.url)}catch(_){} render(); } }; box.appendChild(img); });
     if(cntId) document.getElementById(cntId).textContent = arr.length ? `${arr.length} รูป` : '';
   }
   document.getElementById(inputId).addEventListener('change', async e=>{
@@ -135,7 +147,8 @@ function preview(inputId, boxId, arr, cntId){
     try{
     for(const f of picked){
       let code='';
-      if(inputId==='photo1'){ code = await checkLabelPhoto(f); if(!code) continue; }
+      if(inputId==='photo1'){ code = await checkLabelPhoto(f); if(!code) continue;
+        if(arr.some(x=>x.label===code)){ document.getElementById('msg').textContent='⚠️ รูปซ้ำ เลข '+code+' มีแล้ว ไม่เก็บรูปนี้'; continue; } }
       f.group = inputId==='photo1' ? 'item' : 'receipt';
       f.label = code===true ? '' : code;
       f.upload = uploadNow(f); // อัปโหลดเบื้องหลังทันที
@@ -148,7 +161,8 @@ function preview(inputId, boxId, arr, cntId){
 }
 
 // ตรวจรูปสินค้า: ต้องอ่านบาร์โค้ดใบปะหน้าจากรูปได้
-function loadImg(file){ return new Promise(r=>{ const i=new Image(); i.onload=()=>r(i); i.src=URL.createObjectURL(file); }); }
+function loadImg(file){ return new Promise((r,j)=>{ const i=new Image(); const u=URL.createObjectURL(file);
+  i.onload=()=>{URL.revokeObjectURL(u);r(i)}; i.onerror=()=>{URL.revokeObjectURL(u);j(new Error('โหลดรูปไม่ได้'))}; setTimeout(()=>j(new Error('โหลดรูปช้าเกินไป')),20000); i.src=u; }); }
 function cropBlob(img,x,y,w,h,scale){
   return new Promise(r=>{ const c=document.createElement('canvas'); c.width=w*scale; c.height=h*scale;
     c.getContext('2d').drawImage(img,x,y,w,h,0,0,c.width,c.height); c.toBlob(b=>r(new File([b],'c.jpg',{type:'image/jpeg'})),'image/jpeg',0.92); });
@@ -171,7 +185,7 @@ async function tryDecode(file){
 async function checkLabelPhoto(file){
   const msg=document.getElementById('msg');
   msg.textContent='🔍 กำลังตรวจใบปะหน้าในรูป…';
-  const img0 = await loadImg(file);
+  let img0; try{ img0 = await loadImg(file); }catch(e){ msg.textContent='❌ '+e.message+' ถ่ายใหม่อีกครั้ง'; return false; }
   // ย่อรูปต้นฉบับให้กว้างสุด 1600px ก่อน (รูปมือถือ 4000px ทำให้เครื่องช้า/ค้าง)
   const base = await cropBlob(img0, 0, 0, img0.naturalWidth, img0.naturalHeight, Math.min(1, 1600/img0.naturalWidth));
   let code = await tryDecode(base);                 // 1) รูปย่อ
@@ -208,7 +222,7 @@ async function uploadNow(f){
   pendingUploads++; upStatus();
   try{
     const data = await shrink(f);
-    const r = await fetch(GAS_URL,{method:'POST',body:JSON.stringify({action:'upload', group:f.group, label:f.label||'', carrier:document.getElementById('carrier').value, data})});
+    const r = await fetch(GAS_URL,{method:'POST',body:JSON.stringify({action:'upload', group:f.group, label:f.label||'', carrier:document.getElementById('carrier').value, data}), signal:AbortSignal.timeout?AbortSignal.timeout(60000):undefined});
     const j = await r.json(); if(!j.ok) throw new Error(j.error);
     return j.url;
   }catch(e){ f.failed=true; return null; }
@@ -345,7 +359,7 @@ document.getElementById('send').onclick = async ()=>{
   if(!document.getElementById('branch').value.trim()){ msg.textContent='⚠️ ระบุสาขา'; return; }
   if(!tracking){ msg.textContent='⚠️ ต้องใส่เลขพัสดุ (สแกนหรือพิมพ์)'; return; }
   if(!f1.length){ msg.textContent='⚠️ ต้องถ่ายรูปของวางที่สาขา (เห็นใบปะหน้า)'; return; }
-  if(f1.length!==nTrack && !confirm(`เลขพัสดุ ${nTrack} ชิ้น แต่รูปสินค้า ${f1.length} รูป\nควรถ่าย 1 ชิ้น 1 รูป — ส่งต่อเลยไหม?`)) return;
+  if(f1.length!==nTrack && !(await ask(`เลขพัสดุ ${nTrack} ชิ้น แต่รูปสินค้า ${f1.length} รูป\nควรถ่าย 1 ชิ้น 1 รูป — ส่งต่อเลยไหม?`,'ส่งต่อ'))) return;
   const scannedEl=document.querySelector('input[name=scanned]:checked');
   if(!scannedEl){ msg.textContent='⚠️ เลือกว่าขนส่งยิงรับแล้วหรือยัง'; return; }
   const scanned=scannedEl.value==='yes';
@@ -359,14 +373,16 @@ document.getElementById('send').onclick = async ()=>{
   // รอรูปที่อัปโหลดค้าง (ปกติเสร็จแล้ว) รูปที่ล้มเหลวส่งซ้ำ
   const finalFiles = scanned?f2:files3;
   const getUrl = async f => { let u = await f.upload; if(!u){ f.upload = uploadNow(f); u = await f.upload; } return u; };
+  msg.textContent='⏳ กำลังอัปโหลดรูป…';
   const itemLinks = await Promise.all(f1.map(getUrl));
   const receiptLinks = await Promise.all(finalFiles.map(getUrl));
+  msg.textContent='⏳ กำลังบันทึก…';
   if(itemLinks.includes(null)||receiptLinks.includes(null)){ msg.textContent='❌ อัปโหลดรูปไม่สำเร็จ ลองกดบันทึกอีกครั้ง'; btn.disabled=false; return; }
   const body={name:profile.displayName, userId:profile.userId,
     carrier, branch:document.getElementById('branch').value,
     tracking, scanned, staff, note:document.getElementById('note').value, lat:pos?.lat, lng:pos?.lng, itemLinks, receiptLinks};
   try{
-    const r=await fetch(GAS_URL,{method:'POST',body:JSON.stringify(body)});
+    const r=await fetch(GAS_URL,{method:'POST',body:JSON.stringify(body), signal:AbortSignal.timeout?AbortSignal.timeout(60000):undefined});
     const j=await r.json();
     if(!j.ok) throw new Error(j.error);
     saveLast(body.carrier, body.branch);
