@@ -6,6 +6,11 @@
 <title>YANG Haus ส่งของ</title>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script type="module">
+  try{ const m=await import('https://cdn.jsdelivr.net/npm/zxing-wasm@3.1.6/reader/+esm');
+    window.zxRead = async blob => (await m.readBarcodes(blob,{tryHarder:true,formats:['Code128','Code39','QRCode'],maxNumberOfSymbols:4})).map(r=>r.text);
+  }catch(e){ console.warn('zxing-wasm load failed',e); }
+</script>
 <style>
   body{font-family:-apple-system,Sarabun,sans-serif;margin:0;padding:16px;background:#f4f4f4}
   h2{margin:0 0 12px}
@@ -147,7 +152,10 @@ function preview(inputId, boxId, arr, cntId){
     try{
     for(const f of picked){
       let code='';
-      if(inputId==='photo1'){ code = await checkLabelPhoto(f); if(!code) continue;
+      if(inputId==='photo1'){
+        try{ code = await withTimeout(checkLabelPhoto(f),40000); }
+        catch(e){ document.getElementById('msg').textContent='❌ เครื่องประมวลผลรูปนานเกินไป ถ่ายใหม่อีกครั้ง'; continue; }
+        if(!code) continue;
         if(arr.some(x=>x.label===code)){ document.getElementById('msg').textContent='⚠️ รูปซ้ำ เลข '+code+' มีแล้ว ไม่เก็บรูปนี้'; continue; } }
       f.group = inputId==='photo1' ? 'item' : 'receipt';
       f.label = code===true ? '' : code;
@@ -165,20 +173,27 @@ function loadImg(file){ return new Promise((r,j)=>{ const i=new Image(); const u
   i.onload=()=>{URL.revokeObjectURL(u);r(i)}; i.onerror=()=>{URL.revokeObjectURL(u);j(new Error('โหลดรูปไม่ได้'))}; setTimeout(()=>j(new Error('โหลดรูปช้าเกินไป')),20000); i.src=u; }); }
 function cropBlob(img,x,y,w,h,scale){
   return new Promise(r=>{ const c=document.createElement('canvas'); c.width=w*scale; c.height=h*scale;
-    c.getContext('2d').drawImage(img,x,y,w,h,0,0,c.width,c.height); c.toBlob(b=>r(new File([b],'c.jpg',{type:'image/jpeg'})),'image/jpeg',0.92); });
+    c.getContext('2d').drawImage(img,x,y,w,h,0,0,c.width,c.height); c.toBlob(b=>{ c.width=c.height=0; r(new File([b],'c.jpg',{type:'image/jpeg'})); },'image/jpeg',0.92); });
 }
 // JTTH…, TH…, SPXTH…, 7xxxxxx  → เลขพัสดุ; ตัวอื่น (QR ที่มีลิงก์) ตัดทิ้ง
 function looksLikeTracking(t){ return /^[A-Z0-9]{10,25}$/.test(t) && !/^https?:/i.test(t); }
 const nativeBD = ('BarcodeDetector' in window) ? new BarcodeDetector({formats:['code_128','code_39','qr_code']}) : null;
+function withTimeout(p,ms){ return Promise.race([p, new Promise((_,j)=>setTimeout(()=>j(new Error('timeout')),ms))]); }
 async function tryDecode(file){
-  // ก) ตัวอ่านในตัวเครื่อง (iPhone/Android รุ่นใหม่) — เร็ว ไม่ค้าง
+  // ๐) zxing-wasm — ใช้ได้ทั้ง iPhone/Android
+  if(window.zxRead){
+    try{ const ts=await withTimeout(window.zxRead(file),8000); for(const t0 of ts){ const t=(t0||'').trim(); if(looksLikeTracking(t)) return t; } }catch(_){}
+  }
+  // ก) ตัวอ่านในตัวเครื่อง (Android) — เร็ว ไม่ค้าง
   if(nativeBD){
     try{ const bmp=await createImageBitmap(file); const codes=await nativeBD.detect(bmp); bmp.close&&bmp.close();
       for(const c of codes){ const t=(c.rawValue||'').trim(); if(looksLikeTracking(t)) return t; } }catch(_){}
+    return null; // มีตัวอ่านในเครื่องแล้ว ไม่ต้องใช้ html5-qrcode (กินหน่วยความจำ)
   }
+  if(window.zxRead) return null;
   // ข) สำรอง: html5-qrcode สร้างใหม่แล้วทำลายทิ้งทุกครั้ง (กัน iOS ค้างตอนเปิดกล้องซ้ำ)
   let sc=null;
-  try{ sc=new Html5Qrcode('filescan'); const r=await sc.scanFileV2(file,false); const t=(r.decodedText||'').trim(); if(looksLikeTracking(t)) return t; }catch(_){}
+  try{ sc=new Html5Qrcode('filescan'); const r=await withTimeout(sc.scanFileV2(file,false),8000); const t=(r.decodedText||'').trim(); if(looksLikeTracking(t)) return t; }catch(_){}
   finally{ try{ sc&&sc.clear(); }catch(_){} document.getElementById('filescan').innerHTML=''; }
   return null;
 }
@@ -344,7 +359,7 @@ function shrink(file){
       const s=Math.min(1,1024/img.width); const c=document.createElement('canvas');
       c.width=img.width*s; c.height=img.height*s;
       c.getContext('2d').drawImage(img,0,0,c.width,c.height);
-      res(c.toDataURL('image/jpeg',0.7).split(',')[1]);
+      const out=c.toDataURL('image/jpeg',0.7).split(',')[1]; c.width=c.height=0; URL.revokeObjectURL(img.src); res(out);
     }; img.src=URL.createObjectURL(file);
   });
 }
