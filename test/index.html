@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YANG Haus ส่งของ</title>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script type="module">
+  try{ const m=await import('https://cdn.jsdelivr.net/npm/zxing-wasm@3.1.6/reader/+esm');
+    window.zxRead = async blob => (await m.readBarcodes(blob,{tryHarder:true,formats:['Code128','Code39','QRCode'],maxNumberOfSymbols:4})).map(r=>r.text);
+  }catch(e){ console.warn('zxing-wasm load failed',e); }
+</script>
+<style>
+  body{font-family:-apple-system,Sarabun,sans-serif;margin:0;padding:16px;background:#f4f4f4}
+  h2{margin:0 0 12px}
+  label{display:block;font-weight:600;margin:14px 0 6px}
+  input,select,textarea,button{width:100%;box-sizing:border-box;font-size:16px;padding:12px;border:1px solid #ccc;border-radius:8px;background:#fff}
+  textarea{min-height:80px}
+  .photos{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .photos img{width:90px;height:90px;object-fit:cover;border-radius:6px}
+  button{background:#06c755;color:#fff;border:0;font-weight:700;margin-top:20px}
+  button:disabled{background:#aaa}
+  .small{font-size:13px;color:#666}
+  #msg{margin-top:12px;font-weight:600}
+  .scanbtn{background:#1a73e8;margin-top:8px}
+  #scanner{display:none;margin-top:8px;border-radius:8px;overflow:hidden;background:#000}
+  #scanner.on{display:block}
+  .radio label{font-weight:400;margin:6px 0;display:flex;align-items:center;gap:8px;background:#fff;padding:10px;border:1px solid #ccc;border-radius:8px}
+  .radio input{width:auto}
+  .chip{display:inline-block;background:#e8f5e9;color:#1b5e20;padding:4px 10px;border-radius:14px;margin:4px 4px 0 0;font-size:14px}
+.askbg{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:99;padding:20px}
+.askbox{background:#fff;border-radius:12px;padding:18px;width:100%;max-width:360px;font-size:16px}
+.askbox button{margin-top:8px}.askbox .no{background:#eee;color:#333}
+.galbtn{background:#fff!important;color:#1a73e8!important;border:2px solid #1a73e8!important;font-size:14px;padding:8px;margin-top:6px}
+#cam{display:none;position:fixed;inset:0;background:#000;z-index:95;flex-direction:column;color:#fff}
+#cam.on{display:flex}
+#cam button{width:auto;margin:0}
+#camTop{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;font-size:16px;font-weight:600}
+#camDone{background:#fff;color:#111;padding:10px 22px;font-size:16px}
+#camv{flex:1;min-height:0;width:100%;object-fit:contain;background:#000}
+#camMsg{margin:8px 12px 0;padding:8px 10px;border-radius:8px;background:#333;font-size:15px;min-height:22px}
+#camMsg.ok{background:#1b5e20}#camMsg.bad{background:#b71c1c}
+#camBar{display:flex;align-items:center;gap:10px;padding:10px 12px 18px}
+#camStrip{flex:1;display:flex;gap:6px;overflow-x:auto;min-height:48px}
+#camStrip img{width:48px;height:48px;object-fit:cover;border-radius:6px;flex:none}
+#camShot{width:72px!important;height:72px;border-radius:50%;background:#fff;border:5px solid #999;padding:0;flex:none}
+#camShot:disabled{background:#777}
+#camFlash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .15s}
+.multibtn{background:#ef6c00}
+</style>
+</head>
+<body>
+<h2>📦 ส่งของที่สาขา</h2>
+<div class="small" id="who">กำลังเชื่อม LINE…</div>
+<div class="small" style="color:#999">เวอร์ชัน v5 ทดสอบ (2026-11-22) ถ่ายต่อเนื่อง</div>
+<div id="dbg" class="small" style="background:#fffde7;border:1px solid #fbc02d;border-radius:6px;padding:6px;margin-top:6px;max-height:110px;overflow:auto;font-family:monospace;font-size:11px;white-space:pre-wrap"></div>
+<div class="small" style="background:#fff;border-radius:8px;padding:10px;margin-top:10px;line-height:1.6">
+<b>ขั้นตอน:</b> ① กด "ถ่ายต่อเนื่อง" ถ่ายสินค้าทุกชิ้น ชิ้นละ 1 รูป <b>เข้าใกล้ให้ใบปะหน้าเต็มจอ</b> แล้วกด "เสร็จ" (ระบบอ่านเลขให้เอง) → ② ตอบว่าขนส่งยิงรับหรือยัง → ③ ถ่ายรูปสุดท้าย 1 รูป → ④ บันทึก
+</div>
+
+<label>ขนส่ง</label>
+<select id="carrier">
+  <option>SPX</option><option>J&T</option><option>Flash</option><option>BEST</option><option value="อื่นๆ">อื่นๆ (ระบุ)</option>
+</select>
+<input id="carrierOther" placeholder="ชื่อขนส่ง" style="display:none;margin-top:8px">
+
+<label>สาขา</label>
+<select id="branchSel"></select>
+<input id="branch" placeholder="ชื่อสาขา" style="display:none;margin-top:8px">
+
+<div style="background:#fff3e0;border-left:4px solid #ef6c00;padding:8px 10px;margin:12px 0;border-radius:6px;font-size:14px">⚠️ <b>อัปที่สาขาทันที ก่อนออก</b> — ระบบเช็คใบปะหน้าซ้ำ + บันทึกเวลา/GPS ตอนกดบันทึก</div>
+<label>ถ่ายรูปสินค้าแต่ละชิ้น ถ่ายใกล้ๆ ให้ใบปะหน้าเต็มจอ <span style="color:#d32f2f">*บังคับ</span></label>
+<input type="file" id="photo1" accept="image/*" capture="environment" style="display:none">
+<button type="button" class="scanbtn multibtn" onclick="openMulti()">⚡ ถ่ายต่อเนื่อง (หลายชิ้น ไม่ต้องปิดกล้อง)</button>
+<button type="button" class="scanbtn" onclick="openCam('photo1')">📸 ถ่ายทีละรูป</button>
+<button type="button" class="scanbtn galbtn" onclick="openCam('photo1',true)">🖼️ เลือกจากคลังรูป (ถ่ายไว้แล้ว)</button>
+<div class="photos" id="prev1"></div>
+<div id="filescan" style="display:none"></div>
+<div class="small" id="cnt1"></div>
+
+<label>เลขพัสดุที่อ่านได้ <span class="small" id="trackCount"></span></label>
+<div id="scanned"></div>
+<textarea id="tracking" placeholder="ระบบจะใส่ให้จากรูป (พิมพ์เพิ่มได้ถ้าอ่านไม่ติด)"></textarea>
+<button type="button" class="scanbtn" id="scanBtn" style="background:#607d8b;font-size:14px;padding:8px">📷 อ่านไม่ติด? สแกนบาร์โค้ดด้วยกล้อง</button>
+<div id="scanner"></div>
+
+<label>ขนส่งยิงรับแล้วหรือยัง? <span style="color:#d32f2f">*บังคับ</span></label>
+<div class="radio">
+  <label><input type="radio" name="scanned" value="yes"> ✅ ยิงรับแล้ว</label>
+  <label><input type="radio" name="scanned" value="no"> ⏳ ยังไม่ยิง (ฝากไว้ที่สาขา)</label>
+</div>
+
+<div id="blockYes" style="display:none">
+<label>ถ่ายสลิป/หน้าจอที่ขนส่งยิงรับของ <span style="color:#d32f2f">*บังคับ</span></label>
+<input type="file" id="photo2" accept="image/*" capture="environment" style="display:none">
+<button type="button" class="scanbtn" onclick="openCam('photo2')">📸 ถ่ายสลิปยิงรับ (1 รูปพอ)</button>
+<button type="button" class="scanbtn galbtn" onclick="openCam('photo2',true)">🖼️ เลือกจากคลังรูป (ถ่ายไว้แล้ว)</button>
+<div class="photos" id="prev2"></div>
+</div>
+
+<div id="blockNo" style="display:none">
+<label>ถ่ายรูปของทั้งหมดให้เห็นครบ <span id="needCount">…</span> ชิ้น <span style="color:#d32f2f">*บังคับ</span></label>
+<input type="file" id="photo3" accept="image/*" capture="environment" style="display:none">
+<button type="button" class="scanbtn" onclick="openCam('photo3')">📸 ถ่ายรูปของทั้งหมด (1 รูปพอ)</button>
+<button type="button" class="scanbtn galbtn" onclick="openCam('photo3',true)">🖼️ เลือกจากคลังรูป (ถ่ายไว้แล้ว)</button>
+<div class="photos" id="prev3"></div>
+<div class="radio"><label><input type="checkbox" id="confirmCount"> ✔ ยืนยันว่าในรูปเห็นครบ <span id="needCount2">…</span> ชิ้น</label></div>
+<label>พนักงานที่รับฝาก (ชื่อ/ลักษณะ) <span style="color:#d32f2f">*บังคับ</span></label>
+<input id="staff" placeholder="เช่น พี่ผู้ชายเสื้อส้ม ชื่อเอ">
+</div>
+
+<label>หมายเหตุ</label>
+<input id="note" placeholder="(ถ้ามี)">
+
+<div class="small" id="upstat"></div>
+<div class="small" id="gps">📍 กำลังหาตำแหน่ง…</div>
+<div style="height:90px"></div>
+<div id="stickybar" style="position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid #ddd;padding:10px 16px;box-shadow:0 -2px 8px rgba(0,0,0,.08)">
+  <div class="small" id="hint" style="margin-bottom:6px">ขั้นต่อไป: ถ่ายรูปสินค้าชิ้นแรก</div>
+  <button id="send" disabled style="margin-top:0">บันทึก</button>
+  <div id="msg" style="margin-top:6px"></div>
+</div>
+
+<div id="cam">
+  <div id="camTop"><span id="camCnt">ถ่ายแล้ว 0 ชิ้น</span><button type="button" id="camDone" onclick="closeMulti()">เสร็จ</button></div>
+  <video id="camv" playsinline muted autoplay></video>
+  <div id="camMsg"></div>
+  <div id="camBar"><div id="camStrip"></div><button type="button" id="camShot" onclick="camShot()" aria-label="ถ่ายรูป"></button><div style="flex:1"></div></div>
+  <div id="camFlash"></div>
+</div>
+
+<script>
+// ===== ตั้งค่า (แก้ 2 บรรทัดนี้) =====
+const LIFF_ID = '2012109669-jTtL2UEr';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkkLIG7UicPi3G9x189PN7qNsEyc50iS4p01DTmkUDXU9mu6iEcYtZNezPRa8Ycgcz/exec';
+// ===================================
+
+let profile = null, pos = null;
+function dbg(t){ const d=document.getElementById('dbg'); d.textContent += new Date().toTimeString().slice(0,8)+' '+t+'\n'; d.scrollTop=d.scrollHeight; }
+window.addEventListener('error', e=>dbg('ERR '+(e.message||e)+' @'+(e.lineno||'')));
+window.addEventListener('unhandledrejection', e=>dbg('REJ '+(e.reason&&e.reason.message||e.reason)));
+dbg('หน้าโหลด iOS='+/iPhone|iPad/.test(navigator.userAgent)+' BD='+('BarcodeDetector' in window));
+
+async function main(){
+  await liff.init({liffId: LIFF_ID});
+  if(!liff.isLoggedIn()){ liff.login(); return; }
+  profile = await liff.getProfile();
+  document.getElementById('who').textContent = 'ผู้ส่ง: ' + profile.displayName;
+  document.getElementById('send').disabled = false; // iPhone: ไม่รอ GPS (popup ค้างแล้วปุ่มไม่ติด)
+  navigator.geolocation.getCurrentPosition(p=>{
+    pos = {lat:p.coords.latitude, lng:p.coords.longitude};
+    document.getElementById('gps').textContent = `📍 ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`;
+  }, ()=>{
+    document.getElementById('gps').textContent = '📍 ไม่ได้ตำแหน่ง (กรุณาอนุญาต Location)';
+  }, {enableHighAccuracy:true, timeout:10000});
+}
+// LINE บน iPhone ไม่แสดง confirm() → ใช้กล่องถามในหน้าเอง
+function ask(text, okLabel){
+  return new Promise(res=>{
+    const bg=document.createElement('div'); bg.className='askbg';
+    bg.innerHTML=`<div class="askbox"><div style="white-space:pre-line;margin-bottom:14px">${text}</div><button type="button" class="ok">${okLabel||'ตกลง'}</button><button type="button" class="no">ยกเลิก</button></div>`;
+    bg.querySelector('.ok').onclick=()=>{bg.remove();res(true)};
+    bg.querySelector('.no').onclick=()=>{bg.remove();res(false)};
+    document.body.appendChild(bg);
+  });
+}
+
+// ทำ thumbnail 200px (iPhone: รูปเต็ม 4000px ใน <img> กินแรมมาก)
+function makeThumb(file){ return new Promise(res=>{ const i=new Image(); const u=URL.createObjectURL(file);
+  i.onload=()=>{ const sc=Math.min(1,200/Math.max(i.width,i.height)); const c=document.createElement('canvas'); c.width=i.width*sc; c.height=i.height*sc;
+    c.getContext('2d').drawImage(i,0,0,c.width,c.height); const d=c.toDataURL('image/jpeg',0.7); c.width=c.height=0; URL.revokeObjectURL(u); res(d); };
+  i.onerror=()=>{ URL.revokeObjectURL(u); res(''); }; i.src=u; }); }
+// สะสมรูปทีละใบ (กดถ่ายเพิ่มได้เรื่อยๆ แตะรูปเพื่อลบ)
+const files1=[], files2=[], files3=[];
+const adders={};
+function preview(inputId, boxId, arr, cntId){
+  const box=document.getElementById(boxId);
+  function render(){
+    box.innerHTML='';
+    arr.forEach((f,i)=>{ const img=document.createElement('img'); img.src=f.thumb||'';
+      img.onclick=async()=>{ if(await ask('ลบรูปนี้?'+(f.label?'\n(เลข '+f.label+' จะถูกลบด้วย)':''),'ลบ')){ arr.splice(i,1); if(f.label) removeCode(f.label); render(); } }; box.appendChild(img); });
+    if(cntId) document.getElementById(cntId).textContent = arr.length ? `${arr.length} รูป` : '';
+  }
+  // ตรวจ+เก็บรูป 1 ใบ (ใช้ทั้งปุ่มถ่าย/คลังรูป และโหมดถ่ายต่อเนื่อง) คืน true ถ้าเก็บ
+  async function addOne(f){
+    let code='';
+    dbg('เริ่มตรวจ '+f.name);
+    if(inputId==='photo1'){
+      try{ code = await withTimeout(checkLabelPhoto(f),40000); }
+      catch(e){ document.getElementById('msg').textContent='❌ เครื่องประมวลผลรูปนานเกินไป ถ่ายใหม่อีกครั้ง'; return false; }
+      if(!code) return false;
+      if(arr.some(x=>x.label===code)){ document.getElementById('msg').textContent='⚠️ รูปซ้ำ เลข '+code+' มีแล้ว ไม่เก็บรูปนี้'; if(navigator.vibrate) navigator.vibrate([60,60,60]); return false; } }
+    f.group = inputId==='photo1' ? 'item' : 'receipt';
+    f.label = code===true ? '' : code;
+    dbg('อ่านได้ '+(code===true?'(ไม่ต้องอ่าน)':code));
+    f.thumb = await makeThumb(f);
+    f.upload = uploadNow(f); // อัปโหลดเบื้องหลังทันที
+    arr.push(f);
+    return true;
+  }
+  adders[inputId]={addOne, render};
+  document.getElementById(inputId).addEventListener('change', async e=>{
+    const picked=[...e.target.files]; e.target.value='';
+    dbg(inputId+' ได้ไฟล์ '+picked.length+' '+picked.map(f=>Math.round(f.size/1024)+'KB '+f.type).join(', '));
+    document.querySelectorAll('.scanbtn').forEach(b=>b.disabled=true);
+    try{
+    for(const f of picked){ await addOne(f); }
+    render();
+    }catch(err){ dbg('ERR ใน handler: '+(err&&err.message||err)); }
+    finally{ document.querySelectorAll('.scanbtn').forEach(b=>b.disabled=false); }
+    nextStepHint();
+  });
+}
+
+// ตรวจรูปสินค้า: ต้องอ่านบาร์โค้ดใบปะหน้าจากรูปได้
+function loadImg(file){ return new Promise((r,j)=>{ const i=new Image(); const u=URL.createObjectURL(file);
+  i.onload=()=>{URL.revokeObjectURL(u);r(i)}; i.onerror=()=>{URL.revokeObjectURL(u);j(new Error('โหลดรูปไม่ได้'))}; setTimeout(()=>j(new Error('โหลดรูปช้าเกินไป')),20000); i.src=u; }); }
+function cropBlob(img,x,y,w,h,scale){
+  return new Promise(r=>{ const c=document.createElement('canvas'); c.width=w*scale; c.height=h*scale;
+    c.getContext('2d').drawImage(img,x,y,w,h,0,0,c.width,c.height); c.toBlob(b=>{ c.width=c.height=0; r(new File([b],'c.jpg',{type:'image/jpeg'})); },'image/jpeg',0.92); });
+}
+// JTTH…, TH…, SPXTH…, 7xxxxxx  → เลขพัสดุ; ตัวอื่น (QR ที่มีลิงก์) ตัดทิ้ง
+function looksLikeTracking(t){ return /^[A-Z0-9]{10,25}$/.test(t) && !/^https?:/i.test(t); }
+const nativeBD = ('BarcodeDetector' in window) ? new BarcodeDetector({formats:['code_128','code_39','qr_code']}) : null;
+function withTimeout(p,ms){ return Promise.race([p, new Promise((_,j)=>setTimeout(()=>j(new Error('timeout')),ms))]); }
+async function tryDecode(file){
+  // ๐) zxing-wasm — ใช้ได้ทั้ง iPhone/Android
+  if(window.zxRead){
+    try{ const ts=await withTimeout(window.zxRead(file),8000); for(const t0 of ts){ const t=(t0||'').trim(); if(looksLikeTracking(t)) return t; } }catch(_){}
+  }
+  // ก) ตัวอ่านในตัวเครื่อง (Android) — เร็ว ไม่ค้าง
+  if(nativeBD){
+    try{ const bmp=await createImageBitmap(file); const codes=await nativeBD.detect(bmp); bmp.close&&bmp.close();
+      for(const c of codes){ const t=(c.rawValue||'').trim(); if(looksLikeTracking(t)) return t; } }catch(_){}
+    return null; // มีตัวอ่านในเครื่องแล้ว ไม่ต้องใช้ html5-qrcode (กินหน่วยความจำ)
+  }
+  if(window.zxRead) return null;
+  // ข) สำรอง: html5-qrcode สร้างใหม่แล้วทำลายทิ้งทุกครั้ง (กัน iOS ค้างตอนเปิดกล้องซ้ำ)
+  let sc=null;
+  try{ sc=new Html5Qrcode('filescan'); const r=await withTimeout(sc.scanFileV2(file,false),8000); const t=(r.decodedText||'').trim(); if(looksLikeTracking(t)) return t; }catch(_){}
+  finally{ try{ sc&&sc.clear(); }catch(_){} document.getElementById('filescan').innerHTML=''; }
+  return null;
+}
+async function checkLabelPhoto(file){
+  const msg=document.getElementById('msg');
+  msg.textContent='🔍 กำลังตรวจใบปะหน้าในรูป…';
+  let img0; try{ img0 = await loadImg(file); }catch(e){ msg.textContent='❌ '+e.message+' ถ่ายใหม่อีกครั้ง'; return false; }
+  // ย่อรูปต้นฉบับให้กว้างสุด 1600px ก่อน (รูปมือถือ 4000px ทำให้เครื่องช้า/ค้าง)
+  const base = await cropBlob(img0, 0, 0, img0.naturalWidth, img0.naturalHeight, Math.min(1, 1600/img0.naturalWidth));
+  let code = await tryDecode(base);                 // 1) รูปย่อ
+  if(!code){                                        // 2) ซูมเข้า (ใบปะหน้ามักเล็กเมื่อเทียบกับยาง)
+    const img = await loadImg(base); const W=img.naturalWidth, H=img.naturalHeight;
+    const zones=[[0.2,0.2,0.6,0.6],[0,0,0.65,0.65],[0.35,0,0.65,0.65],[0,0.35,0.65,0.65],[0.35,0.35,0.65,0.65]];
+    let n=0;
+    for(const [fx,fy,fw,fh] of zones){
+      n++; msg.textContent=`🔍 กำลังตรวจใบปะหน้า… (${n}/${zones.length})`;
+      const crop = await cropBlob(img, W*fx, H*fy, W*fw, H*fh, 2);
+      code = await tryDecode(crop); if(code) break;
+    }
+  }
+  if(!code){
+    if(navigator.vibrate) navigator.vibrate([60,60,60]);
+    msg.innerHTML='❌ อ่านบาร์โค้ดจากรูปไม่ได้ — <b>ถ่ายใหม่ เข้าใกล้ให้ใบปะหน้าเต็มจอ</b>';
+    document.getElementById('hint').innerHTML='รูปนี้ไม่ถูกเก็บ กดถ่ายรูปสินค้าใหม่ (ถ้ายังไม่ติด ใช้ปุ่มสีเทา "สแกนด้วยกล้อง")';
+    return false;
+  }
+  const list = ta.value.split(/\n/).map(s=>s.trim()).filter(Boolean);
+  if(!list.includes(code)){
+    addCode(code);
+    msg.textContent='✅ อ่านใบปะหน้าได้ '+code+' (เพิ่มเลขให้แล้ว)';
+  } else {
+    msg.textContent='✅ ใบปะหน้าชัด ตรงกับ '+code;
+  }
+  return code;
+}
+
+// อัปโหลดรูป 1 ใบไป Drive ทันที คืน URL
+let pendingUploads=0;
+function upStatus(){ const el=document.getElementById('upstat'); el.textContent = pendingUploads>0 ? `⬆️ กำลังอัปโหลดรูป ${pendingUploads} รูป…` : ''; }
+async function uploadNow(f){
+  pendingUploads++; upStatus();
+  try{
+    const data = await shrink(f);
+    dbg('อัปโหลด '+(f.label||f.group)+' '+Math.round(data.length/1024)+'KB');
+    const r = await fetch(GAS_URL,{method:'POST',body:JSON.stringify({action:'upload', group:f.group, label:f.label||'', carrier:document.getElementById('carrier').value, data}), signal:AbortSignal.timeout?AbortSignal.timeout(60000):undefined});
+    const j = await r.json(); if(!j.ok) throw new Error(j.error);
+    dbg('อัปโหลดเสร็จ '+(f.label||f.group));
+    return j.url;
+  }catch(e){ dbg('อัปโหลดพัง '+(e&&e.message||e)); f.failed=true; return null; }
+  finally{ pendingUploads--; upStatus(); }
+}
+preview('photo1','prev1',files1,'cnt1'); preview('photo2','prev2',files2); preview('photo3','prev3',files3);
+document.querySelectorAll('input[name=scanned]').forEach(r=>r.addEventListener('change',e=>{
+  document.getElementById('blockYes').style.display = e.target.value==='yes'?'block':'none';
+  document.getElementById('blockNo').style.display  = e.target.value==='no' ?'block':'none';
+  nextStepHint();
+  (e.target.value==='yes'?document.getElementById('blockYes'):document.getElementById('blockNo')).scrollIntoView({behavior:'smooth',block:'center'});
+}));
+// สาขาประจำของแต่ละขนส่ง (แก้ตรงนี้ถ้าเปลี่ยน)
+const BRANCHES = { 'SPX':['วัดกระทุ่ม'], 'J&T':['74/2'], 'Flash':['หลังโรงไม้'], 'BEST':['รามสอง'] };
+function fillBranches(){
+  const c=document.getElementById('carrier').value, sel=document.getElementById('branchSel'), inp=document.getElementById('branch');
+  sel.innerHTML='';
+  (BRANCHES[c]||[]).forEach(b=>{ const o=document.createElement('option'); o.value=b; o.textContent=b; sel.appendChild(o); });
+  const o=document.createElement('option'); o.value='__other'; o.textContent='อื่นๆ (ระบุ)'; sel.appendChild(o);
+  if(!(BRANCHES[c]||[]).length){ sel.value='__other'; }
+  syncBranch();
+}
+function syncBranch(){
+  const sel=document.getElementById('branchSel'), inp=document.getElementById('branch');
+  if(sel.value==='__other'){ inp.style.display='block'; inp.value=''; inp.focus(); }
+  else { inp.style.display='none'; inp.value=sel.value; }
+}
+document.getElementById('branchSel').addEventListener('change', syncBranch);
+document.getElementById('carrier').addEventListener('change', e=>{
+  document.getElementById('carrierOther').style.display = e.target.value==='อื่นๆ' ? 'block' : 'none';
+  fillBranches();
+});
+// จำขนส่ง+สาขาล่าสุด (เก็บในเครื่องพนักงาน)
+const LAST_KEY='yh_last_ship';
+function restoreLast(){
+  let last=null; try{ last=JSON.parse(localStorage.getItem(LAST_KEY)||'null'); }catch(_){}
+  fillBranches();
+  if(!last||!last.carrier) return;
+  const cs=document.getElementById('carrier');
+  if([...cs.options].some(o=>o.value===last.carrier)){ cs.value=last.carrier; }
+  else { cs.value='อื่นๆ'; document.getElementById('carrierOther').value=last.carrier; }
+  document.getElementById('carrierOther').style.display = cs.value==='อื่นๆ' ? 'block' : 'none';
+  fillBranches();
+  const sel=document.getElementById('branchSel'), inp=document.getElementById('branch');
+  if([...sel.options].some(o=>o.value===last.branch)){ sel.value=last.branch; syncBranch(); }
+  else if(last.branch){ sel.value='__other'; inp.style.display='block'; inp.value=last.branch; }
+}
+function saveLast(carrier, branch){ try{ localStorage.setItem(LAST_KEY, JSON.stringify({carrier, branch})); }catch(_){} }
+restoreLast();
+
+async function openCam(id, gallery){
+  dbg('กดปุ่ม '+id+(gallery?' คลังรูป':' กล้อง'));
+  if(scanning){ try{ await scanner.stop(); }catch(_){} document.getElementById('scanner').classList.remove('on'); scanning=false; document.getElementById('scanBtn').textContent='📷 อ่านไม่ติด? สแกนบาร์โค้ดด้วยกล้อง'; }
+  const inp=document.getElementById(id);
+  // iPhone: ถ้ามี capture จะเปิดกล้องอย่างเดียว → ปุ่มคลังรูปเอา capture ออก
+  if(gallery){ inp.removeAttribute('capture'); if(id==='photo1') inp.multiple=true; }
+  else { inp.setAttribute('capture','environment'); inp.multiple=false; }
+  inp.click();
+}
+// ===== ถ่ายต่อเนื่อง: กล้องเปิดค้างในหน้า กดชัตเตอร์ 1 ครั้ง = 1 รูป (รูปนิ่ง ไม่ใช่วิดีโอ) =====
+let camStream=null, camBusy=false;
+function camSay(html){ const m=document.getElementById('camMsg'); m.innerHTML=html; const t=m.textContent;
+  m.className = t.startsWith('✅') ? 'ok' : (t.startsWith('❌')||t.startsWith('⚠️')) ? 'bad' : ''; }
+// ข้อความผลตรวจรูป (#msg) ให้ขึ้นบนจอกล้องด้วย
+new MutationObserver(()=>{ if(camStream) camSay(document.getElementById('msg').innerHTML); })
+  .observe(document.getElementById('msg'),{childList:true,characterData:true,subtree:true});
+function camCount(){ document.getElementById('camCnt').textContent='ถ่ายแล้ว '+files1.length+' ชิ้น'; }
+async function openMulti(){
+  dbg('กดปุ่ม ถ่ายต่อเนื่อง');
+  const msg=document.getElementById('msg');
+  if(scanning){ try{ await scanner.stop(); }catch(_){} document.getElementById('scanner').classList.remove('on'); scanning=false; document.getElementById('scanBtn').textContent='📷 อ่านไม่ติด? สแกนบาร์โค้ดด้วยกล้อง'; }
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ msg.textContent='❌ เครื่องนี้เปิดกล้องในหน้าไม่ได้ ใช้ปุ่ม "ถ่ายทีละรูป" แทน'; return; }
+  try{ camStream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}}); }
+  catch(e){ dbg('เปิดกล้องไม่ได้ '+(e&&e.name||e)); msg.textContent='❌ เปิดกล้องไม่ได้ (กรุณาอนุญาตกล้อง) หรือใช้ปุ่ม "ถ่ายทีละรูป" แทน'; camStream=null; return; }
+  const v=document.getElementById('camv'); v.srcObject=camStream; try{ await v.play(); }catch(_){}
+  document.getElementById('camStrip').innerHTML='';
+  files1.forEach(f=>camThumb(f));
+  document.getElementById('cam').classList.add('on');
+  camCount(); camSay('เล็งให้ใบปะหน้าเต็มจอ แล้วกดปุ่มกลม');
+}
+function closeMulti(){
+  if(camStream){ camStream.getTracks().forEach(t=>t.stop()); camStream=null; }
+  document.getElementById('camv').srcObject=null;
+  document.getElementById('cam').classList.remove('on');
+  adders.photo1.render(); nextStepHint();
+}
+function camThumb(f){ if(!f.thumb) return; const i=document.createElement('img'); i.src=f.thumb; document.getElementById('camStrip').prepend(i); }
+async function camShot(){
+  const v=document.getElementById('camv'), btn=document.getElementById('camShot');
+  if(camBusy||!camStream||!v.videoWidth) return;
+  camBusy=true; btn.disabled=true;
+  const fl=document.getElementById('camFlash'); fl.style.opacity=.7; setTimeout(()=>fl.style.opacity=0,120);
+  try{
+    const c=document.createElement('canvas'); c.width=v.videoWidth; c.height=v.videoHeight;
+    c.getContext('2d').drawImage(v,0,0,c.width,c.height);
+    const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',0.92)); c.width=c.height=0;
+    if(!blob) throw new Error('จับภาพไม่ได้');
+    const f=new File([blob],'cam_'+Date.now()+'.jpg',{type:'image/jpeg'});
+    dbg('ถ่ายต่อเนื่อง '+v.videoWidth+'x'+v.videoHeight+' '+Math.round(blob.size/1024)+'KB');
+    if(await adders.photo1.addOne(f)) camThumb(f);
+  }catch(e){ dbg('ERR camShot '+(e&&e.message||e)); camSay('❌ ถ่ายไม่สำเร็จ ลองอีกครั้ง'); }
+  finally{ camBusy=false; btn.disabled=false; camCount(); }
+}
+document.addEventListener('visibilitychange',()=>{ if(document.hidden&&camStream) closeMulti(); });
+
+// ===== สแกนบาร์โค้ด =====
+let scanner = null, scanning = false, lastCode = '', lastTime = 0;
+const ta = document.getElementById('tracking');
+function addCode(code){
+  code = code.trim();
+  const list = ta.value.split(/\n/).map(s=>s.trim()).filter(Boolean);
+  if(list.includes(code)){ document.getElementById('msg').textContent='⚠️ เลข '+code+' สแกนไปแล้ว'; if(navigator.vibrate) navigator.vibrate([60,60,60]); return; }
+  document.getElementById('msg').textContent='';
+  list.push(code); ta.value = list.join('\n');
+  const chip=document.createElement('span'); chip.className='chip'; chip.textContent='✔ '+code;
+  document.getElementById('scanned').appendChild(chip);
+  if(navigator.vibrate) navigator.vibrate(80);
+  updateCounts();
+}
+function removeCode(code){
+  const list = ta.value.split(/\n/).map(s=>s.trim()).filter(Boolean).filter(c=>c!==code);
+  ta.value = list.join('\n');
+  [...document.getElementById('scanned').children].forEach(ch=>{ if(ch.textContent==='✔ '+code) ch.remove(); });
+  updateCounts();
+}
+function nextStepHint(){
+  const n = ta.value.split(/\n/).map(s=>s.trim()).filter(Boolean).length;
+  const sc = document.querySelector('input[name=scanned]:checked');
+  const h = document.getElementById('hint');
+  if(!n) h.textContent='ขั้นต่อไป: ถ่ายรูปสินค้าชิ้นแรก';
+  else if(!sc) h.innerHTML=`อ่านได้ ${n} ชิ้น — มีชิ้นต่อไปกดถ่ายอีก / ครบแล้ว <b>เลื่อนลงตอบ "ยิงรับแล้วหรือยัง"</b>`;
+  else if(sc.value==='yes' && !files2.length) h.textContent='ขั้นต่อไป: ถ่ายสลิปยิงรับ 1 รูป แล้วกดบันทึก';
+  else if(sc.value==='no' && !files3.length) h.textContent=`ขั้นต่อไป: ถ่ายรูปของทั้งหมด ${n} ชิ้น + ชื่อพนักงาน แล้วกดบันทึก`;
+  else h.innerHTML='<b>พร้อมแล้ว กดบันทึก</b>';
+}
+function updateCounts(){
+  nextStepHint();
+  const n = ta.value.split(/\n/).map(s=>s.trim()).filter(Boolean).length;
+  document.getElementById('trackCount').textContent = n ? `(${n} ชิ้น)` : '';
+  document.getElementById('needCount').textContent = n || '…';
+  document.getElementById('needCount2').textContent = n || '…';
+}
+ta.addEventListener('input', updateCounts);
+document.getElementById('scanBtn').onclick = async ()=>{
+  const btn=document.getElementById('scanBtn'), box=document.getElementById('scanner');
+  if(scanning){ await scanner.stop(); box.classList.remove('on'); btn.textContent='📷 อ่านไม่ติด? สแกนบาร์โค้ดด้วยกล้อง'; scanning=false; return; }
+  scanner = scanner || new Html5Qrcode('scanner');
+  box.classList.add('on'); btn.textContent='⏹ หยุดสแกน'; scanning=true;
+  try{
+    await scanner.start({facingMode:'environment'},
+      {fps:15, qrbox:{width:300,height:160}, formatsToSupport:[Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39, Html5QrcodeSupportedFormats.QR_CODE]},
+      (text)=>{
+        const now=Date.now();
+        text=(text||'').trim();
+        if(!looksLikeTracking(text)) return;
+        if(text===lastCode && now-lastTime<2000) return;
+        lastCode=text; lastTime=now; addCode(text);
+      }, ()=>{});
+  }catch(e){ document.getElementById('msg').textContent='❌ เปิดกล้องไม่ได้: '+e; box.classList.remove('on'); btn.textContent='📷 อ่านไม่ติด? สแกนบาร์โค้ดด้วยกล้อง'; scanning=false; }
+};
+
+// ย่อรูปก่อนส่ง (กว้างสุด 1280px)
+function shrink(file){
+  return new Promise(res=>{
+    const img=new Image(); img.onload=()=>{
+      const s=Math.min(1,1024/img.width); const c=document.createElement('canvas');
+      c.width=img.width*s; c.height=img.height*s;
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+      const out=c.toDataURL('image/jpeg',0.7).split(',')[1]; c.width=c.height=0; URL.revokeObjectURL(img.src); res(out);
+    }; img.src=URL.createObjectURL(file);
+  });
+}
+
+document.getElementById('send').onclick = async ()=>{
+  const btn=document.getElementById('send'), msg=document.getElementById('msg');
+  const f1=files1, f2=files2;
+  const tracking=document.getElementById('tracking').value.trim();
+  const nTrack=tracking.split(/\n/).map(s=>s.trim()).filter(Boolean).length;
+  let carrier=document.getElementById('carrier').value;
+  if(carrier==='อื่นๆ'){ carrier=document.getElementById('carrierOther').value.trim(); if(!carrier){ msg.textContent='⚠️ ระบุชื่อขนส่ง'; return; } }
+  if(!document.getElementById('branch').value.trim()){ msg.textContent='⚠️ ระบุสาขา'; return; }
+  if(!tracking){ msg.textContent='⚠️ ต้องใส่เลขพัสดุ (สแกนหรือพิมพ์)'; return; }
+  if(!f1.length){ msg.textContent='⚠️ ต้องถ่ายรูปของวางที่สาขา (เห็นใบปะหน้า)'; return; }
+  if(f1.length!==nTrack && !(await ask(`เลขพัสดุ ${nTrack} ชิ้น แต่รูปสินค้า ${f1.length} รูป\nควรถ่าย 1 ชิ้น 1 รูป — ส่งต่อเลยไหม?`,'ส่งต่อ'))) return;
+  const scannedEl=document.querySelector('input[name=scanned]:checked');
+  if(!scannedEl){ msg.textContent='⚠️ เลือกว่าขนส่งยิงรับแล้วหรือยัง'; return; }
+  const scanned=scannedEl.value==='yes';
+  const staff=document.getElementById('staff').value.trim();
+  if(scanned && !f2.length){ msg.textContent='⚠️ ต้องถ่ายรูปใบรับฝาก/หน้าจอสแกนของขนส่ง'; return; }
+  if(!scanned && !files3.length){ msg.textContent='⚠️ ต้องถ่ายรูปของวางที่เคาน์เตอร์'; return; }
+  if(!scanned && !staff){ msg.textContent='⚠️ ระบุพนักงานที่รับฝาก'; return; }
+  if(!scanned && !document.getElementById('confirmCount').checked){ msg.textContent=`⚠️ ติ๊กยืนยันว่ารูปเห็นครบ ${nTrack} ชิ้น`; return; }
+  if(scanning){ try{ await scanner.stop(); }catch(_){} document.getElementById('scanner').classList.remove('on'); scanning=false; }
+  btn.disabled=true; msg.textContent='⏳ กำลังส่ง…';
+  // รอรูปที่อัปโหลดค้าง (ปกติเสร็จแล้ว) รูปที่ล้มเหลวส่งซ้ำ
+  const finalFiles = scanned?f2:files3;
+  const getUrl = async f => { let u = await f.upload; if(!u){ f.upload = uploadNow(f); u = await f.upload; } return u; };
+  msg.textContent='⏳ กำลังอัปโหลดรูป…';
+  const itemLinks = await Promise.all(f1.map(getUrl));
+  const receiptLinks = await Promise.all(finalFiles.map(getUrl));
+  msg.textContent='⏳ กำลังบันทึก…';
+  if(itemLinks.includes(null)||receiptLinks.includes(null)){ msg.textContent='❌ อัปโหลดรูปไม่สำเร็จ ลองกดบันทึกอีกครั้ง'; btn.disabled=false; return; }
+  const body={name:profile.displayName, userId:profile.userId,
+    carrier, branch:document.getElementById('branch').value,
+    tracking, scanned, staff, note:document.getElementById('note').value, lat:pos?.lat, lng:pos?.lng, itemLinks, receiptLinks};
+  try{
+    const r=await fetch(GAS_URL,{method:'POST',body:JSON.stringify(body), signal:AbortSignal.timeout?AbortSignal.timeout(60000):undefined});
+    const j=await r.json();
+    if(!j.ok) throw new Error(j.error);
+    saveLast(body.carrier, body.branch);
+    msg.textContent=`✅ บันทึกแล้ว ${j.time} (${j.count} ชิ้น)`;
+    if(liff.isInClient()){
+      await liff.sendMessages([{type:'text',text:`${scanned?'📦 ส่งของแล้ว ✅ ยิงรับแล้ว':'📦 ส่งของแล้ว ⏳ ยังไม่ยิงรับ รอตรวจสอบ'} ${j.time}\n${body.carrier} ${body.branch}${scanned?'':'\nรับฝาก: '+staff}\n${j.count} ชิ้น\n${tracking}\n${pos?`📍 https://maps.google.com/?q=${pos.lat},${pos.lng}`:''}`}]).catch(()=>{});
+      setTimeout(()=>liff.closeWindow(),1500);
+    }
+  }catch(e){ msg.textContent='❌ ส่งไม่สำเร็จ: '+e.message; btn.disabled=false; }
+};
+main();
+</script>
+</body>
+</html>
