@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f663a">
+<title>YANG Haus เช็คสต๊อก</title>
+<style>
+  :root{--green:#1f663a;--green2:#347442;--soft:#e4eddc;--cream:#fcf9e6;--panel:#fffef6;--line:#dcd9c2;--fg:#1d2a20;--muted:#667064;
+    --ok-bg:#e3f1e2;--ok:#1f663a;--warn-bg:#fdf0d2;--warn:#8a5a00;--err-bg:#fbe3e0;--err:#a3271b;--hq:#fdf0d2}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Segoe UI",Roboto,"Noto Sans Thai","Sukhumvit Set",Thonburi,sans-serif;background:var(--cream);color:var(--fg);font-size:16px;line-height:1.45}
+  header{background:var(--green);color:#fff;padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top,0px));display:flex;justify-content:space-between;align-items:center;gap:10px}
+  header b{font-size:18px}
+  header small{font-size:13px;opacity:.9;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:50%}
+  .wrap{max-width:1180px;margin:0 auto;padding:12px 16px 48px}
+  .hide{display:none!important}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .center{text-align:center;padding:36px 16px;color:var(--muted)}
+  .center b{display:block;color:var(--fg);font-size:17px;margin-bottom:6px}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;word-break:break-all}
+
+  .kinds{display:flex;gap:8px;margin-bottom:10px}
+  .kinds button{flex:1;padding:12px 4px;font:inherit;font-weight:700;border:2px solid var(--line);border-radius:10px;background:var(--panel);color:var(--fg)}
+  .kinds button.on{border-color:var(--green);background:var(--green);color:#fff}
+
+  .status{border-radius:12px;padding:12px 14px;border:1px solid transparent;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .status.ok{background:var(--ok-bg);color:var(--ok);border-color:#b9d8b7}
+  .status.old{background:var(--warn-bg);color:var(--warn);border-color:#ecd28f}
+  .status.none{background:var(--err-bg);color:var(--err);border-color:#eeb8b1}
+  .status .t{flex:1;min-width:220px}
+  .status .f{font-weight:700;font-size:16px;overflow-wrap:anywhere}
+  .status .d{font-size:14px}
+  .btn{font:inherit;font-weight:700;padding:12px 16px;border-radius:10px;border:2px solid var(--green);background:var(--green);color:#fff;cursor:pointer}
+  .btn.alt{background:var(--panel);color:var(--green)}
+  .btn:disabled{opacity:.5}
+
+  .msg{border-radius:12px;padding:12px 14px;margin-top:10px;display:flex;gap:10px;align-items:flex-start;border:1px solid;font-size:15px}
+  .msg.ok{background:var(--ok-bg);color:var(--ok);border-color:#b9d8b7}
+  .msg.err{background:var(--err-bg);color:var(--err);border-color:#eeb8b1}
+  .msg.wait{background:var(--warn-bg);color:var(--warn);border-color:#ecd28f}
+  .msg div{flex:1;overflow-wrap:anywhere}
+  .msg b{display:block}
+  .msg button{font:inherit;font-size:22px;line-height:1;border:0;background:transparent;color:inherit;padding:0 4px;cursor:pointer}
+
+  .confirm{margin-top:10px;border:2px solid var(--green)}
+  .confirm h2{font-size:16px;margin:0 0 8px;color:var(--green)}
+  .confirm table{width:100%;border-collapse:collapse;font-size:15px}
+  .confirm td{padding:5px 0;vertical-align:top}
+  .confirm td:first-child{color:var(--muted);white-space:nowrap;padding-right:12px}
+  .confirm td:last-child{text-align:right;overflow-wrap:anywhere}
+  .warnline{background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:8px 10px;margin-top:8px;font-size:14px}
+  .confirm .chk{display:flex;gap:10px;align-items:center;margin-top:10px;font-size:15px}
+  .confirm .chk input{width:22px;height:22px}
+  .confirm .acts{display:flex;gap:10px;margin-top:12px}
+  .confirm .acts .btn{flex:1}
+
+  .searchbar{position:sticky;top:0;z-index:5;background:var(--cream);padding:10px 0 8px;margin-top:6px}
+  .search{position:relative}
+  .search input{width:100%;font:inherit;font-size:17px;padding:12px 44px 12px 14px;border:2px solid var(--line);border-radius:12px;background:#fff;color:var(--fg)}
+  .search input:focus{outline:none;border-color:var(--green)}
+  .search input::-webkit-search-cancel-button{display:none}
+  .search button{position:absolute;right:4px;top:4px;bottom:4px;width:38px;border:0;background:transparent;color:var(--muted);font-size:22px;cursor:pointer}
+  .chips{display:flex;gap:6px;margin-top:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{flex:none;font:inherit;font-size:14px;font-weight:600;padding:6px 14px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--fg);cursor:pointer}
+  .chip.on{background:var(--green);color:#fff;border-color:var(--green)}
+  .opts{display:flex;gap:12px;align-items:center;margin-top:8px;font-size:14px;color:var(--muted)}
+  .opts label{display:flex;gap:6px;align-items:center}
+  .opts input{width:18px;height:18px}
+  .opts .count{margin-left:auto}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px;margin-top:4px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;min-width:0}
+  .card.zero{opacity:.55}
+  .head{display:flex;gap:10px;align-items:flex-start}
+  .name{font-weight:600;font-size:15px;flex:1;min-width:0;overflow-wrap:anywhere}
+  .name mark{background:transparent;color:var(--green);font-weight:800}
+  .total{flex:none;text-align:right;line-height:1.1}
+  .total b{font-size:23px;display:block;font-variant-numeric:tabular-nums}
+  .total span{font-size:11px;color:var(--muted)}
+  .code{margin-top:2px;color:var(--muted)}
+  .br{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+  .b{font-size:13px;padding:3px 8px;border-radius:7px;background:var(--soft);color:#24492f;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .b.hq{background:var(--hq);color:var(--warn)}
+  .b.neg{background:var(--err-bg);color:var(--err)}
+  .b.nil{background:transparent;color:var(--muted)}
+  .ph{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}
+  .ph a{font-size:13px;font-weight:700;padding:6px 11px;border-radius:8px;background:var(--green2);color:#fff;text-decoration:none}
+  .ph .sp{font-size:12px;font-weight:600;padding:4px 8px;border-radius:6px;border:1px solid var(--green2);color:var(--green2)}
+  footer{margin-top:24px;font-size:12px;color:var(--muted);text-align:center}
+  body.drop{outline:4px dashed var(--green);outline-offset:-8px}
+</style>
+</head>
+<body>
+<header><b>เช็คสต๊อก</b><small id="who"></small></header>
+<div class="wrap">
+
+  <div id="vLoad" class="box center"><b>กำลังโหลด…</b><span id="loadNote">เชื่อมต่อ LINE</span></div>
+
+  <div id="vDenied" class="box center hide">
+    <b>บัญชีนี้ยังไม่ได้รับสิทธิ์</b>
+    <span id="deniedNote">ส่งคำขอให้เจ้าของระบบแล้ว รอเปิดสิทธิ์ แล้วเปิดหน้านี้ใหม่</span>
+    <div class="mono" id="deniedId" style="margin-top:10px"></div>
+    <button class="btn alt" style="margin-top:14px" onclick="location.reload()">ลองใหม่</button>
+  </div>
+
+  <div id="vErr" class="box center hide">
+    <b>เปิดหน้าไม่สำเร็จ</b><span id="errNote"></span><br>
+    <button class="btn alt" style="margin-top:14px" id="errBtn">ลองใหม่</button>
+  </div>
+
+  <div id="vMain" class="hide">
+    <div class="kinds hide" id="kinds"></div>
+
+    <div class="status none" id="status">
+      <div class="t"><div class="f" id="stFile">–</div><div class="d" id="stDate"></div></div>
+      <button class="btn hide" id="uplBtn" type="button">อัปเดตไฟล์วันนี้</button>
+      <input type="file" id="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden>
+    </div>
+
+    <div class="box confirm hide" id="confirm">
+      <h2>ตรวจไฟล์ก่อนบันทึก</h2>
+      <table>
+        <tr><td>ไฟล์ใหม่</td><td id="cNew"></td></tr>
+        <tr><td>ไฟล์ปัจจุบัน</td><td id="cOld"></td></tr>
+        <tr><td>รายการ</td><td id="cCount"></td></tr>
+        <tr><td>มีของ</td><td id="cIn"></td></tr>
+        <tr><td>ชีทที่อ่านได้</td><td id="cSheets"></td></tr>
+      </table>
+      <div id="cWarn"></div>
+      <label class="chk hide" id="cAckRow"><input type="checkbox" id="cAck"> ตรวจแล้ว ยืนยันใช้ไฟล์นี้</label>
+      <div class="acts"><button class="btn alt" type="button" id="cCancel">ยกเลิก</button><button class="btn" type="button" id="cSave">บันทึกให้ทุกคน</button></div>
+    </div>
+
+    <div id="msgs"></div>
+
+    <div class="searchbar">
+      <div class="search">
+        <input id="q" type="search" inputmode="search" autocomplete="off" placeholder="เช่น 17 5/114.3 black  หรือ  CE28 18" aria-label="ค้นหาสต๊อก">
+        <button id="clear" type="button" aria-label="ล้างคำค้น" class="hide">×</button>
+      </div>
+      <div class="chips" id="sizes"></div>
+      <div class="opts"><label><input type="checkbox" id="instock" checked> เฉพาะที่มีของ</label><span class="count" id="count"></span></div>
+    </div>
+    <div id="out"></div>
+  </div>
+
+  <footer>YANG Haus เช็คสต๊อก · <span id="ver"></span><div class="mono" id="uid"></div></footer>
+</div>
+
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+const PAGE_VERSION = '2026-11-24a';
+/* ====== ค่าที่ต้องตั้ง (ดู README) ====== */
+const LIFF_ID = '';   // LIFF app "YH เช็คสต๊อก" ใน channel "YH ขนส่ง Login"
+const GAS_URL = '';   // Web app URL ของ Apps Script ที่ผูกกับชีท "YANG Haus สต๊อกเจสตาร์"
+/* ชุดข้อมูล: เพิ่มยางเมื่อมีตัวอ่านไฟล์ (parse) แล้ว → ใส่ { key:'tire', label:'ยาง', hint:'…', parse: parseTire } */
+const KINDS = [
+  { key: 'wheel', label: 'ล้อแม็ก', group: 'ขอบ', hint: 'เช่น 17 5/114.3 black  หรือ  CE28 18', parse: parseWheel },
+];
+const DROP_WARN = 0.2;   // รายการหายเกิน 20% จากไฟล์ปัจจุบัน → ต้องติ๊กยืนยัน
+
+const TH = {"ดำ":"black","ด้าน":"matt","เทา":"gunmetal","ขาว":"white","เงิน":"silver","บรอนซ์":"bronze","ทอง":"gold","แดง":"red","น้ำเงิน":"blue","ฟ้า":"blue","เขียว":"green","ส้ม":"orange","ม่วง":"purple","ขอบ":""};
+const $ = id => document.getElementById(id);
+let idToken = '', me = null, kind = KINDS[0], DATA = null, size = '', timer = 0, pending = null, busy = false;
+
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function show(id) { ['vLoad', 'vDenied', 'vErr', 'vMain'].forEach(v => $(v).classList.toggle('hide', v !== id)); }
+function fail(text, retry) { $('errNote').textContent = text; $('errBtn').onclick = retry || (() => location.reload()); show('vErr'); }
+
+async function post(obj) {
+  try {
+    const r = await fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(obj) });
+    return await r.json();
+  } catch (e) { return { ok: false, code: 'net', error: 'เชื่อมต่อไม่ได้ (เน็ตหลุดหรือหลังบ้านไม่ตอบ): ' + e }; }
+}
+
+/* token หมดอายุ: นอกแอป LINE → login ใหม่ให้เอง · ในแอป LINE → ให้ปิดแล้วเปิดใหม่ */
+function relogin() {
+  try { if (!liff.isInClient()) { liff.logout(); liff.login({ redirectUri: location.href }); return true; } } catch (e) {}
+  return false;
+}
+
+async function init() {
+  $('ver').textContent = PAGE_VERSION;
+  if (!LIFF_ID || !GAS_URL) return fail('ยังไม่ได้ตั้งค่า LIFF_ID / GAS_URL ในหน้า (ดู README)');
+  try {
+    await liff.init({ liffId: LIFF_ID, withLoginOnExternalBrowser: true });
+    if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
+    idToken = liff.getIDToken() || '';
+  } catch (e) { return fail('เชื่อมต่อ LINE ไม่ได้: ' + e); }
+  $('loadNote').textContent = 'ตรวจสิทธิ์';
+  me = await post({ action: 'whoami', idToken });
+  if (!me.ok) {
+    if (me.code === 'auth' && relogin()) return;
+    return fail(me.error || 'ตรวจสิทธิ์ไม่ได้');
+  }
+  $('who').textContent = me.name || '';
+  $('uid').textContent = me.userId || '';
+  if (!me.canView) {
+    $('deniedId').textContent = (me.name ? me.name + ' · ' : '') + me.userId;
+    if (me.role === 'ปิด') $('deniedNote').textContent = 'บัญชีนี้ถูกปิดสิทธิ์';
+    return show('vDenied');
+  }
+  $('uplBtn').classList.toggle('hide', !me.canUpload);
+  if (KINDS.length > 1) {
+    $('kinds').classList.remove('hide');
+    $('kinds').innerHTML = KINDS.map(k => `<button type="button" data-k="${k.key}" class="${k === kind ? 'on' : ''}">${esc(k.label)}</button>`).join('');
+  }
+  await loadData();
+}
+
+async function loadData() {
+  $('loadNote').textContent = 'โหลดสต๊อก' + kind.label;
+  show('vLoad');
+  const r = await post({ action: 'data', kind: kind.key, idToken });
+  if (!r.ok) {
+    if (r.code === 'auth' && relogin()) return;
+    return fail(r.error || 'โหลดข้อมูลไม่ได้', loadData);
+  }
+  DATA = { meta: r.meta, branches: r.branches || [], photos: r.photos || { urls: [], map: {} }, items: (r.items || []).map(a => ({ s: a[0], c: a[1], n: a[2], q: a[3] })) };
+  size = ''; $('q').value = ''; $('q').placeholder = kind.hint;
+  build(); renderStatus(); render(); show('vMain');
+}
+
+/* ---------- ค้นหา ---------- */
+function norm(s) {
+  s = (" " + String(s).toLowerCase() + " ");
+  for (const k in TH) s = s.split(k).join(" " + TH[k] + " ");
+  return s.replace(/×/g, "x").replace(/\+\s*(-?\d)/g, " et$1").replace(/[x\/\-\.,()]/g, " ").replace(/\s+/g, " ");
+}
+function build() {
+  DATA.items.forEach(it => { it.k = norm(it.n + " " + it.c + " ขอบ" + it.s); it.t = it.q.reduce((a, b) => a + b, 0); });
+  const sizes = [...new Set(DATA.items.map(i => i.s))].sort((a, b) => a - b);
+  $('sizes').innerHTML = `<button class="chip ${size === '' ? 'on' : ''}" data-s="">ทุก${esc(kind.group)}</button>` +
+    sizes.map(s => `<button class="chip ${size === s ? 'on' : ''}" data-s="${esc(s)}">${esc(kind.group)} ${esc(s)}</button>`).join('');
+}
+function todayStr() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function renderStatus() {
+  const m = DATA.meta, st = $('status');
+  if (!m) { st.className = 'status none'; $('stFile').textContent = 'ยังไม่มีไฟล์สต๊อก' + kind.label; $('stDate').textContent = me.canUpload ? 'กด "อัปเดตไฟล์วันนี้" เพื่อเริ่ม' : 'รอผู้ดูแลอัปโหลด'; return; }
+  const fresh = String(m.atIso || '').slice(0, 10) === todayStr();
+  st.className = 'status ' + (fresh ? 'ok' : 'old');
+  $('stFile').textContent = m.file;
+  $('stDate').textContent = (fresh ? 'อัปเดตวันนี้ ' : 'ยังไม่ได้อัปเดตวันนี้ · ล่าสุด ') + m.at + ' โดย ' + (m.by || '-') + ' · ' + m.count.toLocaleString() + ' รายการ';
+}
+function hl(n, re) { n = esc(n); return re ? n.replace(re, "<mark>$1</mark>") : n; }
+function render() {
+  const q = $('q').value.trim(); $('clear').classList.toggle('hide', !q);
+  const toks = norm(q).trim().split(" ").filter(Boolean), only = $('instock').checked, out = $('out');
+  if (!DATA.items.length) { $('count').textContent = ''; out.innerHTML = ''; return; }
+  if (!toks.length && !size) { $('count').textContent = ''; out.innerHTML = `<div class="center"><b>พิมพ์ค้นหาได้เลย</b>${esc(kind.group)} · รู (PCD) · ET · สี · ชื่อรุ่น · รหัส<br>เช่น <i>18 6/139.7 matt black</i> หรือ <i>f7314 ขาว</i></div>`; return; }
+  const res = DATA.items.filter(it => (!size || it.s === size) && (!only || it.t > 0) && toks.every(t => it.k.includes(t)));
+  res.sort((a, b) => b.t - a.t || a.n.localeCompare(b.n));
+  if (!res.length) { $('count').textContent = 'ไม่พบ'; out.innerHTML = `<div class="center"><b>ไม่พบ</b>ลองตัดคำให้สั้นลง หรือติ๊ก "เฉพาะที่มีของ" ออก</div>`; return; }
+  $('count').textContent = 'พบ ' + res.length.toLocaleString() + ' รายการ' + (res.length > 150 ? ' (แสดง 150 แรก)' : '');
+  const re = toks.length ? new RegExp("(" + toks.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")", "gi") : null;
+  const P = DATA.photos;
+  out.innerHTML = '<div class="grid">' + res.slice(0, 150).map(it => {
+    const br = it.q.map((v, i) => v ? `<span class="b ${DATA.branches[i] === 'สนญ' ? 'hq' : ''} ${v < 0 ? 'neg' : ''}">${esc(DATA.branches[i])} <b>${v}</b></span>` : '').join('');
+    const ph = (P.map && P.map[it.c]) || [];
+    const phs = ph.length ? `<div class="ph">${ph.map(p => `<a href="${esc(P.urls[p[1]] || '#')}" target="_blank" rel="noopener">รูป${ph.length > 1 && p[0] ? ' ' + esc(p[0]) : ''}</a>`).join('')}${ph.some(p => p[2]) ? '<span class="sp">มีใน Shopee</span>' : ''}</div>` : '';
+    return `<div class="card ${it.t > 0 ? '' : 'zero'}"><div class="head"><div class="name">${hl(it.n, re)}</div><div class="total"><b>${it.t}</b><span>รวม</span></div></div><div class="code mono">${esc(it.c)}</div><div class="br">${br || '<span class="b nil">ไม่มีของทุกสาขา</span>'}</div>${phs}</div>`;
+  }).join('') + '</div>';
+}
+
+/* ---------- ข้อความผล: ค้างไว้จนกดปิด ---------- */
+function msg(type, title, text) {
+  const d = document.createElement('div'); d.className = 'msg ' + type;
+  d.innerHTML = `<div><b>${esc(title)}</b>${esc(text || '')}</div>` + (type === 'wait' ? '' : '<button type="button" aria-label="ปิด">×</button>');
+  const b = d.querySelector('button'); if (b) b.onclick = () => d.remove();
+  $('msgs').innerHTML = ''; $('msgs').appendChild(d);
+  d.scrollIntoView({ block: 'nearest' });
+  return d;
+}
+
+/* ---------- อ่านไฟล์ Excel ---------- */
+/* ล้อแม็ก KAYS: ทุกชีทที่ A1 = "รหัส" · คอลัมน์ รหัส | ชื่อ | สาขา… · ชื่อชีท "ขอบ18" → กลุ่ม 18 */
+function parseWheel(wb) {
+  const d = { branches: [], items: [], sheets: [] };
+  for (const sn of wb.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: null });
+    if (!rows.length || String(rows[0][0]).trim() !== 'รหัส') continue;
+    const hdr = rows[0].map(h => h == null ? '' : String(h).trim());
+    let end = hdr.length; while (end > 0 && !hdr[end - 1]) end--;
+    const branches = hdr.slice(2, end);
+    if (!d.branches.length) d.branches = branches;
+    else if (branches.join('|') !== d.branches.join('|')) throw new Error('ชีท "' + sn + '" มีชื่อสาขาไม่เหมือนชีทอื่น');
+    const sz = sn.replace(/\D/g, '') || sn;
+    d.sheets.push(sn);
+    for (const r of rows.slice(1)) {
+      if (!r[0] || !r[1]) continue;
+      d.items.push([sz, String(r[0]).trim(), String(r[1]).split(/\s+/).join(' ').trim(), branches.map((b, i) => { const v = r[2 + i]; return typeof v === 'number' ? Math.round(v) : 0; })]);
+    }
+  }
+  if (!d.items.length) throw new Error('ไม่พบชีทที่มีหัวคอลัมน์ "รหัส" / "ชื่อ" (ไฟล์นี้อาจไม่ใช่ไฟล์สต๊อก' + kind.label + ')');
+  if (!d.branches.length) throw new Error('ไม่พบคอลัมน์สาขา');
+  return d;
+}
+/* วันที่ในชื่อไฟล์ เช่น STOCK_KAYS_23.11.69.xlsx → 25691123 (ไว้เทียบใหม่/เก่า) */
+function fileDate(name) {
+  const m = /(\d{1,2})[.\-_](\d{1,2})[.\-_](\d{2,4})(?!\d)/.exec(String(name || ''));
+  if (!m) return 0;
+  let y = +m[3]; if (y < 100) y += 2500; else if (y < 2400) y += 543;
+  return y * 10000 + (+m[2]) * 100 + (+m[1]);
+}
+function b64(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
+
+async function pick(file) {
+  if (busy || !me || !me.canUpload) return;
+  $('confirm').classList.add('hide'); pending = null;
+  if (!/\.xlsx?$/i.test(file.name)) return msg('err', 'ไม่ใช่ไฟล์ Excel', file.name + ' · ต้องเป็น .xlsx หรือ .xls ข้อมูลเดิมยังอยู่');
+  let d, u8;
+  try { u8 = new Uint8Array(await file.arrayBuffer()); d = kind.parse(XLSX.read(u8, { type: 'array' })); }
+  catch (e) { return msg('err', 'อ่านไฟล์ไม่ได้ ยังไม่ได้บันทึก', (e && e.message || e) + ' · ข้อมูลเดิมยังอยู่'); }
+  const inStock = d.items.filter(it => it[3].reduce((a, b) => a + b, 0) > 0).length;
+  const m = DATA.meta, warns = [];
+  if (m) {
+    const a = fileDate(file.name), b = fileDate(m.file);
+    if (a && b && a < b) warns.push('วันที่ในชื่อไฟล์ใหม่ เก่ากว่าไฟล์ปัจจุบัน');
+    if (file.name === m.file) warns.push('ชื่อไฟล์เดียวกับไฟล์ปัจจุบัน (อัปซ้ำ)');
+    if (m.count && d.items.length < m.count * (1 - DROP_WARN)) warns.push('รายการหายไปมาก: ' + m.count.toLocaleString() + ' → ' + d.items.length.toLocaleString());
+    if (DATA.branches.length && d.branches.join('|') !== DATA.branches.join('|')) warns.push('ชื่อสาขาเปลี่ยนจากไฟล์ปัจจุบัน: ' + d.branches.join(', '));
+  }
+  pending = { file: file.name, branches: d.branches, items: d.items, fileB64: b64(u8) };
+  $('cNew').textContent = file.name;
+  $('cOld').textContent = m ? m.file + ' (' + m.at + ')' : 'ยังไม่มี';
+  $('cCount').textContent = d.items.length.toLocaleString() + (m ? ' (เดิม ' + m.count.toLocaleString() + ')' : '');
+  $('cIn').textContent = inStock.toLocaleString() + (m ? ' (เดิม ' + m.inStock.toLocaleString() + ')' : '');
+  $('cSheets').textContent = d.sheets.join(', ');
+  $('cWarn').innerHTML = warns.map(w => `<div class="warnline">⚠ ${esc(w)}</div>`).join('');
+  $('cAck').checked = false; $('cAckRow').classList.toggle('hide', !warns.length);
+  $('cSave').disabled = warns.length > 0;
+  $('msgs').innerHTML = '';
+  $('confirm').classList.remove('hide'); $('confirm').scrollIntoView({ block: 'nearest' });
+}
+
+async function saveUpload() {
+  if (!pending || busy) return;
+  busy = true; $('cSave').disabled = true; $('cCancel').disabled = true; $('uplBtn').disabled = true;
+  const p = pending, old = DATA.meta;
+  msg('wait', 'กำลังบันทึก… อย่าปิดหน้านี้', p.file);
+  const r = await post({ action: 'upload', kind: kind.key, idToken, file: p.file, branches: p.branches, items: p.items, fileB64: p.fileB64 });
+  busy = false; $('cCancel').disabled = false; $('uplBtn').disabled = false;
+  if (!r.ok) {
+    $('cSave').disabled = !$('cAckRow').classList.contains('hide') && !$('cAck').checked;
+    const still = old ? 'ข้อมูลที่ทุกคนเห็นยังเป็นไฟล์ ' + old.file : 'ยังไม่มีข้อมูลในระบบ';
+    msg('err', 'บันทึกไม่สำเร็จ', (r.error || 'ไม่ทราบสาเหตุ') + ' · ' + still + (r.code === 'net' ? ' (ถ้าเน็ตหลุดตอนส่ง ให้กดลองใหม่ด้านบนเพื่อเช็คว่าไฟล์เข้าหรือยัง)' : ''));
+    return;
+  }
+  pending = null; $('confirm').classList.add('hide');
+  await loadData();
+  const m = r.meta || {};
+  msg('ok', 'บันทึกสำเร็จ', m.file + ' · ' + (m.count || 0).toLocaleString() + ' รายการ · ' + m.at + ' · ทุกคนเห็นชุดนี้แล้ว');
+}
+
+$('q').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(render, 120); });
+$('clear').onclick = () => { $('q').value = ''; render(); $('q').focus(); };
+$('instock').onchange = render;
+$('sizes').addEventListener('click', e => { const b = e.target.closest('.chip'); if (!b) return; size = b.dataset.s; [...$('sizes').children].forEach(c => c.classList.toggle('on', c === b)); render(); });
+$('kinds').addEventListener('click', e => { const b = e.target.closest('button'); if (!b || busy) return; const k = KINDS.find(x => x.key === b.dataset.k); if (!k || k === kind) return; kind = k; [...$('kinds').children].forEach(c => c.classList.toggle('on', c === b)); $('confirm').classList.add('hide'); pending = null; $('msgs').innerHTML = ''; loadData(); });
+$('uplBtn').onclick = () => $('file').click();
+$('file').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) pick(f); };
+$('cCancel').onclick = () => { pending = null; $('confirm').classList.add('hide'); };
+$('cAck').onchange = () => { $('cSave').disabled = !$('cAck').checked; };
+$('cSave').onclick = saveUpload;
+document.addEventListener('dragover', e => { if (me && me.canUpload) { e.preventDefault(); document.body.classList.add('drop'); } });
+document.addEventListener('dragleave', () => document.body.classList.remove('drop'));
+document.addEventListener('drop', e => { if (!(me && me.canUpload)) return; e.preventDefault(); document.body.classList.remove('drop'); const f = e.dataTransfer.files[0]; if (f) pick(f); });
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,34 @@
+<!doctype html><meta charset="utf-8"><style>
+@font-face{font-family:P;font-weight:700;src:url(fonts/700Bold/Prompt_700Bold.ttf)}
+@font-face{font-family:P;font-weight:500;src:url(fonts/500Medium/Prompt_500Medium.ttf)}
+*{box-sizing:border-box;margin:0}
+body{width:2500px;height:843px;background:#fffff5;font-family:P;position:relative;overflow:hidden}
+.tread{position:absolute;inset:0;opacity:.11}
+.band{position:absolute;left:0;top:0;width:2500px;height:170px;display:flex;align-items:center;gap:28px;padding:0 60px}
+.band img{height:130px;}
+.band .w{font-weight:700;font-size:74px;letter-spacing:2px;color:#1f663a}
+.band .w span{color:#88a577}
+.band .s{font-weight:500;font-size:46px;color:#347442;margin-left:auto}
+.row{position:absolute;left:0;top:170px;width:2500px;height:673px;display:flex}
+.cell{width:833.33px;height:100%;padding:8px 22px 40px}
+.cell:first-child{padding-left:44px}.cell:last-child{padding-right:44px}
+.btn{height:100%;border-radius:56px;background:#1f663a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;border:8px solid #1f663a}
+.btn.new{background:#fffff5}
+.btn svg{width:250px;height:250px}
+.t{font-weight:700;font-size:112px;line-height:1.15;color:#fffff5}
+.d{font-weight:500;font-size:50px;color:#cfe0c4}
+.new .t{color:#1f663a}.new .d{color:#347442}
+</style>
+<svg class="tread" viewBox="0 0 2500 843"><defs><pattern id="p" width="150" height="110" patternUnits="userSpaceOnUse" patternTransform="rotate(-35)"><path d="M10 10h55l18 40h-55zM85 60h55l-18 40h-55z" fill="#347442"/></pattern></defs><rect width="2500" height="170" fill="url(#p)"/></svg>
+<div class="band"><img src="logo.png"><div class="w">YANG<span>HAUS</span></div><div class="s">ยางเฮ้าส์ · ทีมงาน</div></div>
+<div class="row">
+ <div class="cell"><div class="btn">
+  <svg viewBox="0 0 100 100" fill="none" stroke="#fffff5" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"><path d="M50 12 86 30v40L50 88 14 70V30z"/><path d="M14 30l36 18 36-18M50 48v40M32 21l36 18v14"/></svg>
+  <div class="t">ส่งของที่สาขา</div><div class="d">สแกน + ถ่ายรูปพัสดุ</div></div></div>
+ <div class="cell"><div class="btn">
+  <svg viewBox="0 0 100 100" fill="none" stroke="#fffff5" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"><path d="M24 12h52v76l-9-7-9 7-8-7-8 7-9-7-9 7z"/><path d="M36 32h28M36 46h28M36 60h16"/></svg>
+  <div class="t">จดบัญชี</div><div class="d">ใบเสร็จ · ซื้อ · ขาย</div></div></div>
+ <div class="cell"><div class="btn">
+  <svg viewBox="0 0 100 100" fill="none" stroke="#fffff5" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"><circle cx="42" cy="44" r="30"/><circle cx="42" cy="44" r="13"/><path d="M42 14v17M42 57v17M12 44h17M55 44h17M21 23l12 12M51 53l12 12M63 23 51 35M33 53 21 65" stroke-width="3.5"/><path d="M66 68l22 22" stroke-width="9"/></svg>
+  <div class="t">เช็คสต๊อก</div><div class="d">ล้อแม็ก · ยาง เจสตาร์</div></div></div>
+</div>
