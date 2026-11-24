@@ -152,13 +152,14 @@
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const PAGE_VERSION = '2026-11-24a';
+const PAGE_VERSION = '2026-11-24b';
 /* ====== ค่าที่ต้องตั้ง (ดู README) ====== */
 const LIFF_ID = '';   // LIFF app "YH เช็คสต๊อก" ใน channel "YH ขนส่ง Login"
 const GAS_URL = '';   // Web app URL ของ Apps Script ที่ผูกกับชีท "YANG Haus สต๊อกเจสตาร์"
-/* ชุดข้อมูล: เพิ่มยางเมื่อมีตัวอ่านไฟล์ (parse) แล้ว → ใส่ { key:'tire', label:'ยาง', hint:'…', parse: parseTire } */
+/* ชุดข้อมูล (ต้องมีใน KIND_TAB ของ Code.gs ด้วย) */
 const KINDS = [
-  { key: 'wheel', label: 'ล้อแม็ก', group: 'ขอบ', hint: 'เช่น 17 5/114.3 black  หรือ  CE28 18', parse: parseWheel },
+  { key: 'wheel', label: 'ล้อแม็ก', group: 'ขอบ', hint: 'เช่น 17 5/114.3 black  หรือ  CE28 18', tips: 'ขอบ · รู (PCD) · ET · สี · ชื่อรุ่น · รหัส<br>เช่น <i>18 6/139.7 matt black</i> หรือ <i>f7314 ขาว</i>', parse: parseWheel },
+  { key: 'tire', label: 'ยาง', group: 'ขอบ', hint: 'เช่น 265/65 17 at  หรือ  dunlop 195/55', tips: 'ขนาด · ขอบ · ยี่ห้อ · รุ่น · ปี (26) · รหัส<br>เช่น <i>265/65 17</i> หรือ <i>atlander 225/65 at</i>', parse: parseTire },
 ];
 const DROP_WARN = 0.2;   // รายการหายเกิน 20% จากไฟล์ปัจจุบัน → ต้องติ๊กยืนยัน
 
@@ -233,9 +234,9 @@ function norm(s) {
 }
 function build() {
   DATA.items.forEach(it => { it.k = norm(it.n + " " + it.c + " ขอบ" + it.s); it.t = it.q.reduce((a, b) => a + b, 0); });
-  const sizes = [...new Set(DATA.items.map(i => i.s))].sort((a, b) => a - b);
+  const sizes = [...new Set(DATA.items.map(i => i.s))].sort((a, b) => (isNaN(a) - isNaN(b)) || a - b);
   $('sizes').innerHTML = `<button class="chip ${size === '' ? 'on' : ''}" data-s="">ทุก${esc(kind.group)}</button>` +
-    sizes.map(s => `<button class="chip ${size === s ? 'on' : ''}" data-s="${esc(s)}">${esc(kind.group)} ${esc(s)}</button>`).join('');
+    sizes.map(s => `<button class="chip ${size === s ? 'on' : ''}" data-s="${esc(s)}">${isNaN(s) ? '' : esc(kind.group) + ' '}${esc(s)}</button>`).join('');
 }
 function todayStr() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 function renderStatus() {
@@ -251,7 +252,7 @@ function render() {
   const q = $('q').value.trim(); $('clear').classList.toggle('hide', !q);
   const toks = norm(q).trim().split(" ").filter(Boolean), only = $('instock').checked, out = $('out');
   if (!DATA.items.length) { $('count').textContent = ''; out.innerHTML = ''; return; }
-  if (!toks.length && !size) { $('count').textContent = ''; out.innerHTML = `<div class="center"><b>พิมพ์ค้นหาได้เลย</b>${esc(kind.group)} · รู (PCD) · ET · สี · ชื่อรุ่น · รหัส<br>เช่น <i>18 6/139.7 matt black</i> หรือ <i>f7314 ขาว</i></div>`; return; }
+  if (!toks.length && !size) { $('count').textContent = ''; out.innerHTML = `<div class="center"><b>พิมพ์ค้นหาได้เลย</b>${kind.tips}</div>`; return; }
   const res = DATA.items.filter(it => (!size || it.s === size) && (!only || it.t > 0) && toks.every(t => it.k.includes(t)));
   res.sort((a, b) => b.t - a.t || a.n.localeCompare(b.n));
   if (!res.length) { $('count').textContent = 'ไม่พบ'; out.innerHTML = `<div class="center"><b>ไม่พบ</b>ลองตัดคำให้สั้นลง หรือติ๊ก "เฉพาะที่มีของ" ออก</div>`; return; }
@@ -277,26 +278,47 @@ function msg(type, title, text) {
 }
 
 /* ---------- อ่านไฟล์ Excel ---------- */
-/* ล้อแม็ก KAYS: ทุกชีทที่ A1 = "รหัส" · คอลัมน์ รหัส | ชื่อ | สาขา… · ชื่อชีท "ขอบ18" → กลุ่ม 18 */
-function parseWheel(wb) {
+/* ไฟล์เจสตาร์ทั้งล้อและยาง: ทุกชีทที่แถวแรกมีหัว "รหัส" + "ชื่อ" แล้วตามด้วยชื่อสาขา
+   อ่านตามชื่อหัวคอลัมน์ (ไม่ยึดตำแหน่ง) เพราะบางชีทสาขาไม่ครบ หรือมีคอลัมน์ "รหัส" ซ้ำ 2 ช่อง · สาขาที่ชีทนั้นไม่มี = 0 */
+function parseSheets(wb, groupOf) {
   const d = { branches: [], items: [], sheets: [] };
+  const raw = [];
   for (const sn of wb.SheetNames) {
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: null });
-    if (!rows.length || String(rows[0][0]).trim() !== 'รหัส') continue;
+    if (!rows.length) continue;
     const hdr = rows[0].map(h => h == null ? '' : String(h).trim());
-    let end = hdr.length; while (end > 0 && !hdr[end - 1]) end--;
-    const branches = hdr.slice(2, end);
-    if (!d.branches.length) d.branches = branches;
-    else if (branches.join('|') !== d.branches.join('|')) throw new Error('ชีท "' + sn + '" มีชื่อสาขาไม่เหมือนชีทอื่น');
-    const sz = sn.replace(/\D/g, '') || sn;
-    d.sheets.push(sn);
+    const ni = hdr.indexOf('ชื่อ');
+    if (ni < 1 || hdr[ni - 1] !== 'รหัส') continue;
+    const cols = [];
+    for (let c = ni + 1; c < hdr.length; c++) if (hdr[c]) { cols.push([c, hdr[c]]); if (!d.branches.includes(hdr[c])) d.branches.push(hdr[c]); }
+    if (!cols.length) continue;
+    let n = 0;
     for (const r of rows.slice(1)) {
-      if (!r[0] || !r[1]) continue;
-      d.items.push([sz, String(r[0]).trim(), String(r[1]).split(/\s+/).join(' ').trim(), branches.map((b, i) => { const v = r[2 + i]; return typeof v === 'number' ? Math.round(v) : 0; })]);
+      const code = r[ni - 1], name = r[ni];
+      if (!code || !name) continue;
+      raw.push([sn, String(code).trim(), String(name).split(/\s+/).join(' ').trim(), cols, r]); n++;
     }
+    if (n) d.sheets.push(sn);
   }
-  if (!d.items.length) throw new Error('ไม่พบชีทที่มีหัวคอลัมน์ "รหัส" / "ชื่อ" (ไฟล์นี้อาจไม่ใช่ไฟล์สต๊อก' + kind.label + ')');
-  if (!d.branches.length) throw new Error('ไม่พบคอลัมน์สาขา');
+  if (!raw.length) throw new Error('ไม่พบชีทที่มีหัวคอลัมน์ "รหัส" / "ชื่อ" (ไฟล์นี้อาจไม่ใช่ไฟล์สต๊อก' + kind.label + ')');
+  const pos = {}; d.branches.forEach((b, i) => pos[b] = i);
+  for (const [sn, code, name, cols, r] of raw) {
+    const q = d.branches.map(() => 0);
+    for (const [c, b] of cols) { const v = r[c]; if (typeof v === 'number') q[pos[b]] = Math.round(v); }
+    d.items.push([groupOf(sn, name), code, name, q]);
+  }
+  return d;
+}
+/* ล้อแม็ก KAYS: ชื่อชีท "ขอบ18" → กลุ่ม 18 */
+function parseWheel(wb) {
+  const d = parseSheets(wb, sn => sn.replace(/\D/g, '') || sn);
+  if (!d.sheets.some(sn => /ขอบ/.test(sn))) throw new Error('ไฟล์นี้ไม่มีชีทชื่อ "ขอบ.." น่าจะไม่ใช่ไฟล์ล้อแม็ก (ถ้าเป็นไฟล์ยาง ให้สลับไปที่ปุ่ม ยาง ก่อน)');
+  return d;
+}
+/* ยาง: 1 ชีท = 1 ยี่ห้อ · กลุ่ม = ขอบ จากชื่อ เช่น "ATLANDER 225/65 R17 AT (25)" → 17 */
+function parseTire(wb) {
+  const d = parseSheets(wb, (sn, name) => { const m = /(?:^|[^A-Za-z])R\s*(\d{2})(?!\d)/i.exec(name); return m ? m[1] : 'อื่นๆ'; });
+  if (d.sheets.some(sn => /ขอบ/.test(sn))) throw new Error('ไฟล์นี้มีชีทชื่อ "ขอบ.." น่าจะเป็นไฟล์ล้อแม็ก (สลับไปที่ปุ่ม ล้อแม็ก ก่อน)');
   return d;
 }
 /* วันที่ในชื่อไฟล์ เช่น STOCK_KAYS_23.11.69.xlsx → 25691123 (ไว้เทียบใหม่/เก่า) */
