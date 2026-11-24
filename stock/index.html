@@ -152,7 +152,7 @@
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const PAGE_VERSION = '2026-11-24b';
+const PAGE_VERSION = '2026-11-24c';
 /* ====== ค่าที่ต้องตั้ง (ดู README) ====== */
 const LIFF_ID = '';   // LIFF app "YH เช็คสต๊อก" ใน channel "YH ขนส่ง Login"
 const GAS_URL = '';   // Web app URL ของ Apps Script ที่ผูกกับชีท "YANG Haus สต๊อกเจสตาร์"
@@ -165,7 +165,7 @@ const DROP_WARN = 0.2;   // รายการหายเกิน 20% จา�
 
 const TH = {"ดำ":"black","ด้าน":"matt","เทา":"gunmetal","ขาว":"white","เงิน":"silver","บรอนซ์":"bronze","ทอง":"gold","แดง":"red","น้ำเงิน":"blue","ฟ้า":"blue","เขียว":"green","ส้ม":"orange","ม่วง":"purple","ขอบ":""};
 const $ = id => document.getElementById(id);
-let idToken = '', me = null, kind = KINDS[0], DATA = null, size = '', timer = 0, pending = null, busy = false;
+let idToken = '', me = null, kind = KINDS[0], DATA = null, size = '', timer = 0, pending = null, busy = false, savedNote = '';
 
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 function show(id) { ['vLoad', 'vDenied', 'vErr', 'vMain'].forEach(v => $(v).classList.toggle('hide', v !== id)); }
@@ -219,7 +219,7 @@ async function loadData() {
   const r = await post({ action: 'data', kind: kind.key, idToken });
   if (!r.ok) {
     if (r.code === 'auth' && relogin()) return;
-    return fail(r.error || 'โหลดข้อมูลไม่ได้', loadData);
+    return fail(savedNote + (r.error || 'โหลดข้อมูลไม่ได้'), loadData);
   }
   DATA = { meta: r.meta, branches: r.branches || [], photos: r.photos || { urls: [], map: {} }, items: (r.items || []).map(a => ({ s: a[0], c: a[1], n: a[2], q: a[3] })) };
   size = ''; $('q').value = ''; $('q').placeholder = kind.hint;
@@ -373,7 +373,9 @@ async function saveUpload() {
     return;
   }
   pending = null; $('confirm').classList.add('hide');
+  savedNote = 'ไฟล์ ' + p.file + ' บันทึกสำเร็จแล้ว แต่โหลดหน้าใหม่ไม่ได้: ';
   await loadData();
+  savedNote = '';
   const m = r.meta || {};
   msg('ok', 'บันทึกสำเร็จ', m.file + ' · ' + (m.count || 0).toLocaleString() + ' รายการ · ' + m.at + ' · ทุกคนเห็นชุดนี้แล้ว');
 }
