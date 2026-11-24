@@ -9,6 +9,6 @@
 |---|---|
 | ส่งของที่สาขา | `https://liff.line.me/2012109669-jTtL2UEr` |
 | จดบัญชี | `https://liff.line.me/2012109669-kGPX1UtI` |
-| เช็คสต๊อก | `https://liff.line.me/<LIFF ID เช็คสต๊อก>` (ดู stock/README.md) |
+| เช็คสต๊อก | `https://liff.line.me/2012109669-qQAVcyBR` |
 
 หมายเหตุ: LINE บนคอม (Windows/macOS) ไม่แสดงริชเมนู — บนคอมให้เปิดลิงก์ LIFF ในเบราว์เซอร์แทน

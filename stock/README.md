@@ -9,7 +9,7 @@
 | `stock/index.html` (หน้าค้นหา + อัปโหลด) | repo นี้ → GitHub Pages `https://thipwonh-ship-it.github.io/yanghaus-liff/stock/` |
 | `stock/Code.gs` (หลังบ้าน) | Google Sheet **YANG Haus สต๊อกเจสตาร์** → ส่วนขยาย → Apps Script → Deploy เป็น Web app |
 | Google Sheet | `1_ad16RMxrZeGjFfoYEiaRnj-QOjFyqEiY4Q45tndbh0` ในโฟลเดอร์ Drive **YANG Haus สต๊อกเจสตาร์** (`1VFnvc6vKnbXmNeIARKk3TR9Rp__9fqSm`) |
-| LIFF | channel "YH ขนส่ง Login" → LIFF app ใหม่ "YH เช็คสต๊อก" Endpoint = URL หน้า GitHub Pages ข้างบน |
+| LIFF | channel "YH ขนส่ง Login" → LIFF app "YH เช็คสต๊อก" (`2012109669-qQAVcyBR` → `https://liff.line.me/2012109669-qQAVcyBR`) Endpoint = URL หน้า GitHub Pages ข้างบน |
 | Script properties | `LINE_CHANNEL_ID` (ตั้งเอง) · `STOCK_FOLDER_ID` (ระบบตั้งเอง) — ห้ามใส่ใน repo |
 
 ## แท็บในชีท
@@ -30,7 +30,7 @@
 - เริ่มต้น: Thipwon + คุณอ้อย = `อัปโหลด`
 
 ## ใช้งาน
-1. มือถือ: ริชเมนู → **เช็คสต๊อก** · คอม: เปิด `https://liff.line.me/<LIFF ID>` ในเบราว์เซอร์ → login LINE (LINE บนคอมไม่แสดงริชเมนู)
+1. มือถือ: ริชเมนู → **เช็คสต๊อก** · คอม: เปิด `https://liff.line.me/2012109669-qQAVcyBR` ในเบราว์เซอร์ → login LINE (LINE บนคอมไม่แสดงริชเมนู)
 2. กล่องบนสุดบอกชื่อไฟล์ + วันเวลา + ผู้อัปโหลด — **เขียว** = อัปเดตวันนี้ · **เหลือง** = ยังไม่ได้อัปเดตวันนี้ · **แดง** = ยังไม่มีไฟล์
 3. ค้นหา — ล้อ: ขอบ / PCD / ET / สี (ไทยหรืออังกฤษ) / รุ่น / รหัส เช่น `18 6/139.7 ดำ ด้าน` · ยาง: ขนาด / ขอบ / ยี่ห้อ / รุ่น / ปี เช่น `265/65 17 bridgestone`
 4. อัปโหลด (เฉพาะสิทธิ์ `อัปโหลด`): กด **อัปเดตไฟล์วันนี้** (คอมลากไฟล์วางได้) → ตรวจตารางเทียบไฟล์เดิม → **บันทึกให้ทุกคน**
