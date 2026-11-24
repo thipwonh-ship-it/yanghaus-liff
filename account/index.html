@@ -72,6 +72,13 @@
 <header><span>🧾 จดบัญชี YANG Haus</span><small id="who"></small></header>
 <main>
 
+<div id="denyBox" class="card hide" style="text-align:center;padding:26px 14px">
+  <b style="display:block;font-size:17px;margin-bottom:6px">บัญชีนี้ยังไม่ได้รับสิทธิ์</b>
+  <span id="denyNote" style="color:#555"></span>
+  <div id="denyId" style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#999;margin-top:10px;word-break:break-all"></div>
+  <button class="big alt" onclick="location.reload()">ลองใหม่</button>
+</div>
+
 <!-- STEP 1: ประเภท + รูป -->
 <section id="s1">
   <div class="card">
@@ -87,6 +94,9 @@
     <div class="seg" style="margin-top:8px">
       <button id="tSale" class="hide" onclick="setType('sale')">🧾 ขาย (โอน/ขายส่ง)</button>
       <button id="tDash" class="hide" onclick="location.href='dashboard.html'">📊 รายจ่ายเดือนนี้</button>
+    </div>
+    <div class="seg" style="margin-top:8px">
+      <button id="tClaim" class="hide" onclick="location.href=CLAIM_LIFF">🧾 ตั้งเบิก</button>
     </div>
     <div class="seg" style="margin-top:8px">
       <button id="tStock" onclick="openStock('count')">🗃 สต๊อกยาง/ล้อ (นับ · รับเข้า · ตัดออก · ดู)</button>
@@ -343,7 +353,8 @@
 
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script>
-const PAGE_VERSION = '2026-11-09b';
+const PAGE_VERSION = '2026-11-24a';
+const CLAIM_LIFF = 'https://liff.line.me/2012109669-N03WhvLZ';   // หน้าตั้งเบิก / อนุมัติเบิก (account/claim.html)
 if ('serviceWorker' in navigator) { try { navigator.serviceWorker.register('sw.js'); } catch (e) {} }   // PWA: เพิ่มไปหน้าจอหลักได้
 const LIFF_ID = '2012109669-kGPX1UtI';
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxm5fuyVniisAk14alXdzSMDsvrf_iQ_lI6Ti6hDDPOs--PSsZMVabqC_OwOP7Paa0SWA/exec';
@@ -372,11 +383,27 @@ function setDoc(x) {
   $('dHint').textContent = x === 'original' ? 'ใส่วันที่ = วันที่ในใบกำกับ (ภาษีซื้อจะเข้าเดือนนั้น ส่วนต้นทุนยังอยู่เดือนที่รับของ) · ถ้าเลขที่นี้เคยลงไว้แล้วระบบไม่ลงซ้ำ แค่ติ๊ก "ตัวจริงรับแล้ว" · ใบกำกับรวบหลายใบส่งของ (JSM, ป.รุ่งเรือง) → ติ๊กแถวที่รวมแล้วยอดเท่าใบ' : 'ตัวจริงตามมาทีหลัง → ระบบติดสถานะ "รอใบกำกับตัวจริง" พอได้ตัวจริงค่อยถ่ายอีกครั้งด้วยปุ่มนี้';
 }
 function showAdmin(on) { ['tList', 'tSale', 'tDash'].forEach(id => $(id).classList.toggle('hide', !on)); }
+/* สิทธิ์ (ตั้งแต่ 2026-11-24): ผู้ดูแล = ทุกปุ่ม · พนักงาน = ส่ง COD + ตั้งเบิก เท่านั้น · อื่นๆ = ใช้ไม่ได้ (หลังบ้านตรวจซ้ำทุกคำขอ) */
+function applyRole(r, userId) {
+  role = r;
+  const admin = r === 'ผู้ดูแล', staff = r === 'พนักงาน';
+  showAdmin(admin);
+  ['tExp', 'tBuy', 'tStock', 'btnManual', 'manualHint'].forEach(id => $(id).classList.toggle('hide', !admin));
+  $('tClaim').classList.toggle('hide', !(admin || staff));
+  $('tClaim').textContent = admin ? '🧾 อนุมัติเบิก / ตั้งเบิก' : '🧾 ตั้งเบิก (สำรองจ่ายไปก่อน)';
+  $('denyBox').classList.toggle('hide', admin || staff);
+  $('s1').classList.toggle('hide', !(admin || staff) || !$('s2').classList.contains('hide') || !$('s3').classList.contains('hide') || !$('s4').classList.contains('hide') || !$('s5').classList.contains('hide'));
+  if (!(admin || staff)) {
+    ['s2', 's3', 's4', 's5'].forEach(id => $(id).classList.add('hide'));
+    $('denyNote').textContent = r === 'ปิด' ? 'บัญชีนี้ถูกปิดสิทธิ์' : r === 'รออนุมัติ' ? 'ส่งคำขอให้ผู้ดูแลแล้ว รอเปิดสิทธิ์ แล้วเปิดหน้านี้ใหม่' : 'ยืนยันตัวตนกับ LINE ไม่ได้ — ปิดหน้านี้แล้วเปิดใหม่จากไลน์';
+    $('denyId').textContent = userId || '';
+  } else if (staff && type !== 'cod') setType('cod');
+}
 let img2B64 = '';
 const OUR_PHONES = ['0811363332', '0811197855', '0811239924'];
 const isOurPhone = p => OUR_PHONES.includes(String(p || '').replace(/\D/g, ''));
 const isOurName = n => /yang\s*haus|ยางเฮ้าส์|ตามโกล์บ|tamglobe/i.test(String(n || ''));
-let type = 'exp', imgB64 = '', imgMime = 'image/jpeg', profile = null, cfg = null, hasAI = true, idToken = '';
+let type = 'exp', imgB64 = '', imgMime = 'image/jpeg', profile = null, cfg = null, hasAI = true, idToken = '', sess = '', role = '';
 const $ = id => document.getElementById(id);
 
 async function init() {
@@ -387,21 +414,26 @@ async function init() {
     profile = await liff.getProfile();
     $('who').textContent = profile.displayName;
     idToken = liff.getIDToken() || '';
-    // โชว์ปุ่มผู้ดูแลทันทีจากที่จำไว้ (หลังบ้านยังตรวจสิทธิ์ทุกครั้งตอนบันทึก)
-    const adminKey = 'yh_admin_' + profile.userId;
-    try { if (localStorage.getItem(adminKey) === '1') showAdmin(true); } catch (e) {}
-    post({ action: 'whoami', idToken }).then(w => {
+    // โชว์ปุ่มตามบทบาทที่จำไว้ทันที (หลังบ้านยังตรวจสิทธิ์ทุกคำขอ)
+    const roleKey = 'yh_role_' + profile.userId;
+    let known = ''; try { known = localStorage.getItem(roleKey) || ''; } catch (e) {}
+    if (known) applyRole(known, profile.userId);
+    post({ action: 'whoami' }).then(w => {
       if (!w.ok) return;
-      $('whoBox').textContent = w.userId ? 'LINE userId: ' + w.userId + (w.admin ? ' (ผู้ดูแล)' : '') : (w.note || '');
-      showAdmin(!!w.admin);
-      try { localStorage.setItem(adminKey, w.admin ? '1' : '0'); } catch (e) {}
+      sess = w.sess || '';
+      const r = w.role || (w.admin ? 'ผู้ดูแล' : w.userId ? 'พนักงาน' : '');   // หลังบ้านรุ่นเก่าไม่มี role
+      $('whoBox').textContent = w.userId ? 'LINE userId: ' + w.userId + (r ? ' (' + r + ')' : '') : (w.note || '');
+      applyRole(r, w.userId || profile.userId);
+      try { if (r) localStorage.setItem(roleKey, r); else localStorage.removeItem(roleKey); } catch (e) {}
     });
-  } catch (e) { $('who').textContent = 'นอก LINE'; }
+  } catch (e) { $('who').textContent = 'นอก LINE'; applyRole('', ''); }
   try { cfg = JSON.parse(localStorage.getItem('yh_cfg') || 'null'); } catch (e) {}
   if (cfg) fillConfig();
   post({ action: 'config' }).then(c => { if (c.ok) { cfg = c; hasAI = c.hasAI; localStorage.setItem('yh_cfg', JSON.stringify(c)); fillConfig(); } });
   $('fDate').value = today(); $('cDate').value = today(); $('sDate').value = today();
   const mode = new URLSearchParams(location.search).get('mode') || (liff.state && new URLSearchParams(liff.state).get('mode'));
+  if (role === 'พนักงาน') { if (mode === 'claim') location.href = CLAIM_LIFF; else setType('cod'); return; }   // พนักงาน: เข้าได้แค่ส่ง COD
+  if (mode === 'dash') { location.replace('dashboard.html'); return; }   // ปุ่มริชเมนู รายจ่ายเดือนนี้ (dashboard ตรวจสิทธิ์ผู้ดูแลเอง)
   if (['exp', 'buy', 'cod', 'sale'].includes(mode)) setType(mode);
   if (mode === 'paid') openPaid();
   if (/^stock/.test(mode || '')) openStock((mode.split('-')[1]) || 'count');   // ?mode=stock | stock-in | stock-out | stock-view
@@ -1150,9 +1182,13 @@ function shrink(file, maxW, q) {
   });
 }
 async function post(obj) {
+  if (!obj.idToken) obj.idToken = idToken;
+  if (sess) obj.sess = sess;
   try {
     const r = await fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(obj) });
-    return await r.json();
+    const j = await r.json();
+    if (j && j.ok === false && j.code === 'role' && j.role !== 'พนักงาน' && j.role !== 'ผู้ดูแล') applyRole(j.role || '', j.userId || '');   // ถูกปิดสิทธิ์/ยังไม่อนุมัติ
+    return j;
   } catch (e) { return { ok: false, error: 'เชื่อมต่อไม่ได้: ' + e }; }
 }
 init();

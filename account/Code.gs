@@ -7,7 +7,11 @@
  * Script Properties (Project Settings → Script properties):
  *   GEMINI_API_KEY   = คีย์จาก https://aistudio.google.com/apikey  (ไม่ใส่ = กรอกเองทุกช่อง)
  *   LINE_CHANNEL_ID  = Channel ID ของ LINE Login channel "YH ขนส่ง Login" (หน้า Basic settings)
- *   COD_ADMINS       = LINE userId ที่ติ๊กเงิน COD เข้าได้ คั่นด้วย , (ดู userId ได้ท้ายหน้าฟอร์ม)
+ *   COD_ADMINS       = LINE userId ของผู้ดูแล คั่นด้วย , (ดู userId ได้ท้ายหน้าฟอร์ม) — ผู้ดูแลตั้งได้อีกทางที่แท็บ "ผู้ใช้" บทบาท = ผู้ดูแล
+ *   LINE_OA_TOKEN    = (ใช้เฉพาะตอนตั้งริชเมนูชุดผู้ดูแล) Channel access token ของ OA "YH In House"
+ *
+ * สิทธิ์ (ตั้งแต่ 2026-11-24): ทุกคำขอต้องยืนยันตัวตนกับ LINE · แท็บ "ผู้ใช้" คอลัมน์ C = ผู้ดูแล / พนักงาน / รออนุมัติ / ปิด
+ *   พนักงาน ใช้ได้แค่: ส่ง COD + ตั้งเบิก · ที่เหลือ (ค่าใช้จ่าย/ซื้อ/ขาย/สต๊อก/dashboard/อนุมัติเบิก) เฉพาะผู้ดูแล
  */
 const SHEET_ID  = '17gY8l9pkJjIXqZWRfStYwga-xasJjef97HaHfI7KIB4';
 const FOLDER_ID = '1Pfy5Bo6vfkxWDyglsAJwDhg9rh5pajV-';   // โฟลเดอร์ ส่งบัญชี
@@ -19,6 +23,14 @@ const TAB_BUY = 'ซื้อ';
 const TAB_COD = 'COD';
 const TAB_SALE = 'ขาย';
 const TAB_CFG = 'ตั้งค่า';
+const TAB_USER = 'ผู้ใช้';
+const TAB_CLAIM = 'ตั้งเบิก';
+const ROLE_ADMIN = 'ผู้ดูแล', ROLE_STAFF = 'พนักงาน', ROLE_PENDING = 'รออนุมัติ', ROLE_OFF = 'ปิด';
+const MAX_PENDING = 30;       // กันคนนอกที่ได้ลิงก์มากดจนแท็บผู้ใช้บวม
+const SESS_SEC = 21600;       // อายุ session 6 ชม. (ID token ของ LINE หมดใน ~1 ชม. → กรอกฟอร์มนานไม่หลุด)
+const CL_WAIT = 'รออนุมัติ', CL_PAID = 'จ่ายแล้ว', CL_REJECT = 'ตีกลับ';
+const SUB_CLAIM = 'ตั้งเบิก (รออนุมัติ)';
+const SUB_SLIP = 'สลิปจ่ายคืนตั้งเบิก';
 const CAT_SHIP = 'Lalamove/ค่าส่งสินค้า';
 // เบอร์ของเราเอง (บจก.ตามโกล์บ / YANG Haus) — ห้ามถือเป็นเบอร์ลูกค้า
 const OUR_PHONES = ['0811363332', '0811197855', '0811239924'];
@@ -30,22 +42,34 @@ function doGet() {
   return json_({ ok: true, service: 'yanghaus-account', time: new Date().toISOString() });
 }
 
+/* action ที่พนักงานใช้ได้ (นอกนั้นต้องเป็นผู้ดูแล) · save ดูตาม type: cod = พนักงานได้ */
+const STAFF_ACTIONS = ['config', 'read', 'claimAdd', 'claimMine'];
+
 function doPost(e) {
   try {
     const req = JSON.parse(e.postData.contents || '{}');
+    if (req.action === 'whoami') return json_(whoami_(req));
+    const staffOk = STAFF_ACTIONS.indexOf(req.action) >= 0 || (req.action === 'save' && req.type === 'cod');
+    const u = auth_(req, !staffOk);
+    if (!u.ok) return json_(u);
+    if (!req.by) req.by = u.name;
     switch (req.action) {
       case 'config': return json_(getConfig_());
       case 'read':   return json_(readReceipt_(req.image, req.mime, req.type));
       case 'save':   return json_(saveRecord_(req));
-      case 'whoami':     return json_(whoami_(req.idToken));
       case 'buyPending': return json_(buyPending_(req.vendor));
       case 'buyMatch':   return json_(buyMatch_(req));
-      case 'codPending': { const u = requireAdmin_(req.idToken); return json_(u.ok ? codPending_() : u); }
-      case 'codPaid':    { const u = requireAdmin_(req.idToken); return json_(u.ok ? codPaid_(req.items, u.name) : u); }
-      case 'codList':    { const u = requireAdmin_(req.idToken); return json_(u.ok ? codList_(req.month) : u); }
-      case 'dash':       { const u = requireAdmin_(req.idToken); return json_(u.ok ? dash_(req.month, req.biz) : u); }
+      case 'codPending': return json_(codPending_());
+      case 'codPaid':    return json_(codPaid_(req.items, u.name));
+      case 'codList':    return json_(codList_(req.month));
+      case 'dash':       return json_(dash_(req.month, req.biz));
       case 'stockList':  return json_(stockList_());
       case 'stockSave':  return json_(stockSave_(req));
+      case 'claimAdd':     return json_(claimAdd_(req, u));
+      case 'claimMine':    return json_(claimMine_(u));
+      case 'claimPending': return json_(claimPending_());
+      case 'claimPay':     return json_(claimPay_(req, u));
+      case 'claimReject':  return json_(claimReject_(req, u));
       default:       return json_({ ok: false, error: 'unknown action' });
     }
   } catch (err) {
@@ -157,7 +181,7 @@ function setCheckbox_(rng, val) {
 function saveRecord_(r) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   if (r.type === 'cod') return saveCod_(ss, r);
-  if (r.type === 'sale') { const u = requireAdmin_(r.idToken); if (!u.ok) return u; return saveSale_(ss, r); }
+  if (r.type === 'sale') return saveSale_(ss, r);   // สิทธิ์ผู้ดูแลตรวจแล้วใน doPost
   const isBuy = r.type === 'buy';
   // ธุรกิจ: ซื้อของมาขาย = YANG Haus เสมอ · ค่าใช้จ่ายต้องระบุและต้องอยู่ในรายการ ตั้งค่า!A (ไม่มี default — กันหน้าเก่าที่ยัง cache ส่งค่าว่าง/ค่าเก่ามา)
   if (isBuy) r.business = 'YANG Haus';
@@ -305,30 +329,96 @@ function buyMatch_(r) {
   return { ok: true, count: rows.length, sum: sum, invoiceTotal: Number(r.total) || 0, diff: +(sum - (Number(r.total) || 0)).toFixed(2), photoUrl: url };
 }
 
-/* ---------- สิทธิ์: ตรวจ ID token กับ LINE แล้วเช็ค userId ใน COD_ADMINS ---------- */
+/* ---------- สิทธิ์ ----------
+   ตัวตน: session (ออกให้ตอน whoami อยู่ได้ 6 ชม.) หรือ ID token ของ LINE (ตรวจกับ LINE จำผลไว้ไม่เกิน 10 นาที)
+   บทบาท: COD_ADMINS หรือแท็บ ผู้ใช้ = ผู้ดูแล → ผู้ดูแล · แท็บ ผู้ใช้ = พนักงาน → พนักงาน · ไม่มีในแท็บ → เพิ่มแถว รออนุมัติ */
 function verifyLine_(idToken) {
   const cid = PropertiesService.getScriptProperties().getProperty('LINE_CHANNEL_ID');
   if (!idToken || !cid) return null;
+  const cache = CacheService.getScriptCache();
+  const key = 'v:' + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, cid + '|' + idToken));
+  const hit = cache.get(key);
+  if (hit) { try { return JSON.parse(hit); } catch (e) {} }
   const res = UrlFetchApp.fetch('https://api.line.me/oauth2/v2.1/verify', {
     method: 'post', payload: { id_token: idToken, client_id: cid }, muteHttpExceptions: true });
   if (res.getResponseCode() !== 200) return null;
   const j = JSON.parse(res.getContentText());
-  return { userId: j.sub, name: j.name || '' };
+  if (!j.sub) return null;
+  const u = { userId: j.sub, name: j.name || '' };
+  const left = j.exp ? Math.floor(Number(j.exp) - Date.now() / 1000) - 5 : 300;
+  if (left > 10) { try { cache.put(key, JSON.stringify(u), Math.min(600, left)); } catch (e) {} }
+  return u;
 }
-function isAdmin_(userId) {
-  const list = (PropertiesService.getScriptProperties().getProperty('COD_ADMINS') || '').split(/[,\s]+/).filter(Boolean);
-  return list.indexOf(userId) >= 0;
+function identify_(req) {
+  const sess = String(req.sess || '');
+  if (/^[\w-]{40,100}$/.test(sess)) {
+    const hit = CacheService.getScriptCache().get('s:' + sess);
+    if (hit) { try { const u = JSON.parse(hit); if (u && u.userId) return u; } catch (e) {} }
+  }
+  return verifyLine_(req.idToken);
 }
-function whoami_(idToken) {
-  const u = verifyLine_(idToken);
-  if (!u) return { ok: true, userId: '', admin: false, note: !PropertiesService.getScriptProperties().getProperty('LINE_CHANNEL_ID') ? 'ยังไม่ได้ตั้ง LINE_CHANNEL_ID' : 'ตรวจ token ไม่ผ่าน' };
-  return { ok: true, userId: u.userId, name: u.name, admin: isAdmin_(u.userId) };
+function newSess_(u) {
+  const sess = Utilities.getUuid() + Utilities.getUuid();
+  try { CacheService.getScriptCache().put('s:' + sess, JSON.stringify({ userId: u.userId, name: u.name }), SESS_SEC); } catch (e) { return ''; }
+  return sess;
 }
-function requireAdmin_(idToken) {
-  const u = verifyLine_(idToken);
-  if (!u) return { ok: false, error: 'ยืนยันตัวตนกับ LINE ไม่ผ่าน (ตั้ง LINE_CHANNEL_ID หรือเปิดหน้าใหม่)' };
-  if (!isAdmin_(u.userId)) return { ok: false, error: 'ไม่มีสิทธิ์ติ๊กเงิน COD (userId ' + u.userId + ')' };
-  return { ok: true, userId: u.userId, name: u.name };
+function adminIds_() {
+  return (PropertiesService.getScriptProperties().getProperty('COD_ADMINS') || '').split(/[,\s]+/).filter(Boolean);
+}
+function isAdmin_(userId) { return adminIds_().indexOf(userId) >= 0; }
+function userSheet_(ss) {
+  let sh = ss.getSheetByName(TAB_USER);
+  if (!sh) {
+    sh = ss.insertSheet(TAB_USER);
+    sh.getRange(1, 1, 1, 5).setValues([['userId', 'ชื่อ LINE', 'บทบาท', 'วันที่ขอ', 'หมายเหตุ']]).setFontWeight('bold');
+    sh.getRange('A:A').setNumberFormat('@'); sh.setFrozenRows(1);
+    sh.getRange('G1').setValue('บทบาท: ผู้ดูแล = ใช้ได้ทุกอย่าง · พนักงาน = ส่ง COD + ตั้งเบิก · รออนุมัติ / ปิด = ใช้ไม่ได้ · คอลัมน์ B แก้เป็นชื่อเล่นได้ ระบบจะใช้ชื่อนี้');
+  }
+  return sh;
+}
+function users_(sh) {
+  const last = sh.getLastRow(), out = {};
+  if (last < 2) return out;
+  sh.getRange(2, 1, last - 1, 3).getValues().forEach(function (r) {
+    const id = String(r[0] || '').trim();
+    if (id) out[id] = { name: String(r[1] || ''), role: String(r[2] || '').trim() };
+  });
+  return out;
+}
+function roleOf_(u) {
+  const sh = userSheet_(SpreadsheetApp.openById(SHEET_ID));
+  const all = users_(sh);
+  // ชื่อในแท็บ ผู้ใช้ คอลัมน์ B แก้เป็นชื่อเล่นได้ → ใช้ชื่อนี้แทนชื่อ LINE ในทุกที่ (ผู้เบิก / จดผ่านไลน์)
+  if (all[u.userId] && all[u.userId].name) u.name = all[u.userId].name;
+  if (isAdmin_(u.userId)) return ROLE_ADMIN;
+  if (all[u.userId]) return all[u.userId].role || ROLE_PENDING;
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return ROLE_PENDING;
+  try {
+    const again = users_(sh);
+    if (again[u.userId]) return again[u.userId].role || ROLE_PENDING;
+    const pending = Object.keys(again).filter(function (k) { return again[k].role === ROLE_PENDING; }).length;
+    if (pending < MAX_PENDING) sh.appendRow([u.userId, u.name, ROLE_PENDING, new Date(), '']);
+  } finally { lock.releaseLock(); }
+  return ROLE_PENDING;
+}
+function noCid_() { return !PropertiesService.getScriptProperties().getProperty('LINE_CHANNEL_ID'); }
+/* needAdmin = true → ต้องเป็นผู้ดูแล · false → พนักงานหรือผู้ดูแล */
+function auth_(req, needAdmin) {
+  const u = identify_(req);
+  if (!u) return { ok: false, code: 'auth', error: noCid_() ? 'หลังบ้านยังไม่ได้ตั้ง LINE_CHANNEL_ID' : 'ยืนยันตัวตนกับ LINE ไม่ผ่าน — ปิดหน้านี้แล้วเปิดใหม่จากไลน์อีกครั้ง' };
+  const role = roleOf_(u);
+  const ok = role === ROLE_ADMIN || (!needAdmin && role === ROLE_STAFF);
+  if (!ok) return { ok: false, code: 'role', role: role, userId: u.userId, name: u.name,
+    error: role === ROLE_STAFF ? 'เมนูนี้ใช้ได้เฉพาะผู้ดูแล' : role === ROLE_OFF ? 'บัญชีนี้ถูกปิดสิทธิ์' : 'บัญชีนี้ยังไม่ได้รับสิทธิ์ รอผู้ดูแลเปิดให้ (userId ' + u.userId + ')' };
+  return { ok: true, userId: u.userId, name: u.name, role: role, admin: role === ROLE_ADMIN };
+}
+function whoami_(req) {
+  const u = identify_(req);
+  if (!u) return { ok: true, userId: '', admin: false, role: '', note: noCid_() ? 'ยังไม่ได้ตั้ง LINE_CHANNEL_ID' : 'ตรวจ token ไม่ผ่าน' };
+  const role = roleOf_(u);
+  try { richMenuSync_(u.userId, role === ROLE_ADMIN); } catch (e) {}
+  return { ok: true, userId: u.userId, name: u.name, role: role, admin: role === ROLE_ADMIN, staff: role === ROLE_STAFF, sess: newSess_(u) };
 }
 
 /* รายการ COD ที่ยังไม่ได้เงิน (L = FALSE) */
@@ -639,6 +729,254 @@ function findDuplicate_(ss, invNo, d, vendor, total) {
   }
   return '';
 }
+
+/* ============================================================
+   ตั้งเบิก — พนักงานสำรองจ่าย ถ่ายใบเสร็จ → ผู้ดูแลอนุมัติ = จ่ายคืนทันที (โอน/เงินสด, ติ๊กได้หลายใบต่อการจ่าย 1 ครั้ง)
+   → ลงแท็บ ค่าใช้จ่าย อัตโนมัติ
+   แท็บ ตั้งเบิก: A เลขที่ B วันที่ส่ง C ผู้เบิก D userId E วันที่ในใบเสร็จ F ร้าน G รายละเอียด H ยอด I รูปใบเสร็จ J สถานะ
+     K ธุรกิจ L ประเภท M วิธีจ่าย N สลิป O วันที่จ่าย P ผู้อนุมัติ Q เหตุผลตีกลับ R แถวค่าใช้จ่าย S มีใบกำกับ T เลขใบกำกับ U เลขผู้เสียภาษี V หมายเหตุ W ชุดจ่าย
+   ============================================================ */
+const CLAIM_HEAD = ['เลขที่', 'วันที่ส่ง', 'ผู้เบิก', 'userId', 'วันที่ในใบเสร็จ', 'ร้าน', 'รายละเอียด', 'ยอด', 'รูปใบเสร็จ', 'สถานะ',
+  'ธุรกิจ', 'ประเภท', 'วิธีจ่าย', 'สลิป', 'วันที่จ่าย', 'ผู้อนุมัติ', 'เหตุผลตีกลับ', 'แถวค่าใช้จ่าย', 'มีใบกำกับ', 'เลขใบกำกับ', 'เลขผู้เสียภาษี', 'หมายเหตุ', 'ชุดจ่าย'];
+function claimSheet_(ss) {
+  let sh = ss.getSheetByName(TAB_CLAIM);
+  if (!sh) {
+    sh = ss.insertSheet(TAB_CLAIM);
+    sh.getRange(1, 1, 1, CLAIM_HEAD.length).setValues([CLAIM_HEAD]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+    ['A:A', 'D:D', 'T:T', 'U:U', 'W:W'].forEach(function (a) { sh.getRange(a).setNumberFormat('@'); });
+    ['B:B', 'E:E', 'O:O'].forEach(function (a) { sh.getRange(a).setNumberFormat('yyyy-mm-dd'); });
+  }
+  return sh;
+}
+function claimRows_(sh) {
+  const last = sh.getLastRow();
+  if (last < 2) return [];
+  return sh.getRange(2, 1, last - 1, CLAIM_HEAD.length).getValues().map(function (r, i) {
+    const dstr = function (v) { return v instanceof Date ? Utilities.formatDate(v, 'Asia/Bangkok', 'yyyy-MM-dd') : String(v || ''); };
+    return { row: i + 2, id: String(r[0] || '').trim(), sent: dstr(r[1]), by: String(r[2] || ''), userId: String(r[3] || '').trim(), date: dstr(r[4]),
+      vendor: String(r[5] || ''), items: String(r[6] || ''), total: Number(r[7]) || 0, photo: String(r[8] || ''), status: String(r[9] || '').trim(),
+      business: String(r[10] || ''), category: String(r[11] || ''), method: String(r[12] || ''), slip: String(r[13] || ''), paid: dstr(r[14]),
+      approver: String(r[15] || ''), reason: String(r[16] || ''), hasVat: r[18] === true || String(r[18]).toLowerCase() === 'true',
+      invNo: String(r[19] || '').trim(), taxId: String(r[20] || '').trim(), note: String(r[21] || '') };
+  }).filter(function (c) { return c.id; });
+}
+function claimPublic_(c) {
+  return { id: c.id, sent: c.sent, by: c.by, date: c.date, vendor: c.vendor, items: c.items, total: c.total, photo: c.photo, status: c.status,
+    category: c.category, method: c.method, paid: c.paid, reason: c.reason, hasVat: c.hasVat, invNo: c.invNo, note: c.note };
+}
+const safeName_ = s => String(s || '').replace(/[\\/:*?"<>|]/g, '').trim().slice(0, 40);
+
+/* พนักงานส่งตั้งเบิก: ต้องมีรูปใบเสร็จ + ยอด */
+function claimAdd_(r, u) {
+  if (!r.image) return { ok: false, error: 'ต้องถ่ายรูปใบเสร็จก่อนส่งตั้งเบิก' };
+  const total = Math.round((Number(r.total) || 0) * 100) / 100;
+  if (!(total > 0)) return { ok: false, error: 'ต้องใส่ยอดเงินที่เบิก' };
+  const items = String(r.items || '').trim().slice(0, 200);
+  if (!items) return { ok: false, error: 'ต้องใส่ว่าเบิกค่าอะไร' };
+  const d = parseDate_(r.date), ymd = Utilities.formatDate(d, 'Asia/Bangkok', 'yyyy-MM-dd');
+  const vendor = String(r.vendor || '').trim().slice(0, 120), invNo = String(r.invoiceNo || '').trim().slice(0, 60);
+  const norm = v => String(v || '').replace(/\s+/g, '').toLowerCase();
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) return { ok: false, error: 'ระบบกำลังบันทึกรายการอื่น ลองใหม่อีกครั้ง' };
+  try {
+    const sh = claimSheet_(ss), rows = claimRows_(sh);
+    const dup = rows.filter(function (c) {
+      if (c.status === CL_REJECT) return false;
+      if (invNo && c.invNo && norm(c.invNo) === norm(invNo)) return true;
+      return c.date === ymd && Math.abs(c.total - total) < 0.005 && norm(c.vendor) === norm(vendor);
+    })[0];
+    if (dup) return { ok: false, dup: true, error: 'ใบนี้เคยตั้งเบิกแล้ว (' + dup.id + ' โดย ' + dup.by + ' สถานะ ' + dup.status + ')' };
+    const now = new Date(), day = Utilities.formatDate(now, 'Asia/Bangkok', 'yyMMdd');
+    const n = rows.filter(function (c) { return c.id.indexOf('CL' + day + '-') === 0; }).length + 1;
+    const id = 'CL' + day + '-' + String(n).padStart(3, '0');
+    const folder = getOrCreate_(getOrCreate_(DriveApp.getFolderById(FOLDER_ID), Utilities.formatDate(d, 'Asia/Bangkok', 'yyyy-MM')), SUB_CLAIM);
+    const file = folder.createFile(Utilities.newBlob(Utilities.base64Decode(r.image), r.mime || 'image/jpeg',
+      ymd + '_' + id + '_' + (safeName_(vendor) || 'receipt') + '_' + total.toFixed(2) + '.jpg'));
+    const row = sh.getLastRow() + 1;
+    sh.getRange(row, 1, 1, CLAIM_HEAD.length).setValues([[id, now, u.name, u.userId, d, vendor, items, total, file.getUrl(), CL_WAIT,
+      '', String(r.category || ''), '', '', '', '', '', '', r.hasVat === true, invNo, String(r.taxId || '').replace(/\D/g, '').slice(0, 13), String(r.note || '').slice(0, 200), '']]);
+    return { ok: true, id: id, total: total };
+  } finally { lock.releaseLock(); }
+}
+
+/* รายการของตัวเอง (ล่าสุด 30) */
+function claimMine_(u) {
+  const rows = claimRows_(claimSheet_(SpreadsheetApp.openById(SHEET_ID))).filter(function (c) { return c.userId === u.userId; });
+  return { ok: true, items: rows.slice(-30).reverse().map(claimPublic_), me: { userId: u.userId, name: u.name, role: u.role, admin: u.admin } };
+}
+
+/* ผู้ดูแล: รายการรออนุมัติทั้งหมด + ตัวเลือกธุรกิจ/ประเภท + ที่จ่ายล่าสุด 10 รายการ */
+function claimPending_() {
+  const rows = claimRows_(claimSheet_(SpreadsheetApp.openById(SHEET_ID)));
+  const cfg = getConfig_();
+  const wait = rows.filter(function (c) { return c.status === CL_WAIT; });
+  return { ok: true, items: wait.map(claimPublic_), total: wait.reduce(function (t, c) { return t + c.total; }, 0),
+    recent: rows.filter(function (c) { return c.status === CL_PAID; }).slice(-10).reverse().map(claimPublic_),
+    business: cfg.business, categories: cfg.categories };
+}
+
+/* แถวค่าใช้จ่าย (รูปแบบเดียวกับ saveRecord_): A วันที่ B ธุรกิจ C ประเภท D รายละเอียด E ยอด F มีใบกำกับ | G,H สูตร | I ผู้ขาย J อ้างอิง K หมายเหตุ L เลขใบกำกับ M เลขผู้เสียภาษี N รูป O ซื้อจาก */
+function writeExpenseRow_(ss, o) {
+  const sh = ss.getSheetByName(TAB_EXP), row = nextRow_(sh);
+  sh.getRange(row, 1, 1, 6).setValues([[o.d, o.business, o.category || 'อื่นๆ', o.items || '', o.total, o.hasVat === true]]);
+  if (o.invNo) sh.getRange(row, 12).setNumberFormat('@');
+  if (o.taxId) sh.getRange(row, 13).setNumberFormat('@');
+  sh.getRange(row, 9, 1, 7).setValues([[o.vendor || '', o.orderRef || '', o.note || '', o.invNo || '', o.taxId || '', o.photoUrl || '', o.source || '']]);
+  setCheckbox_(sh.getRange(row, 6), o.hasVat === true);
+  sh.getRange(row, 1).setNumberFormat('yyyy-mm-dd');
+  return row;
+}
+
+/* ผู้ดูแลอนุมัติ = จ่ายแล้ว: items [{id, business, category, hasVat}] + method โอน/เงินสด + สลิป (ไม่บังคับ) 1 ใบต่อทั้งชุด
+   ตรวจครบทุกใบก่อน ถ้ามีใบไหนไม่ผ่าน → ไม่บันทึกเลยทั้งชุด */
+function claimPay_(req, u) {
+  const list = req.items || [];
+  if (!list.length) return { ok: false, error: 'ยังไม่ได้ติ๊กรายการ' };
+  const method = req.method === 'เงินสด' ? 'เงินสด' : req.method === 'โอน' ? 'โอน' : '';
+  if (!method) return { ok: false, error: 'ต้องเลือกวิธีจ่าย (โอน / เงินสด)' };
+  const ss = SpreadsheetApp.openById(SHEET_ID), cfg = getConfig_();
+  const payD = parseDate_(req.payDate), payYmd = Utilities.formatDate(payD, 'Asia/Bangkok', 'yyyy-MM-dd');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(25000)) return { ok: false, error: 'มีคนกำลังอนุมัติอยู่ รอสักครู่แล้วลองใหม่' };
+  try {
+    const sh = claimSheet_(ss), byId = {};
+    claimRows_(sh).forEach(function (c) { byId[c.id] = c; });
+    const errs = [], todo = [], seen = {};
+    list.forEach(function (it) {
+      const id = String(it.id || ''), c = byId[id];
+      if (!c) return errs.push(id + ': ไม่พบรายการ');
+      if (seen[id]) return; seen[id] = true;
+      if (c.status !== CL_WAIT) return errs.push(id + ': สถานะเป็น ' + c.status + ' แล้ว (มีคนทำไปก่อน)');
+      if (cfg.business.indexOf(it.business) < 0) return errs.push(id + ': ยังไม่ได้เลือกธุรกิจ');
+      const d = parseDate_(c.date);
+      const dup = findDuplicate_(ss, c.invNo, d, c.vendor, c.total);
+      if (dup) return errs.push(id + ': ซ้ำกับที่ลงไว้แล้วใน ' + dup + ' — ตีกลับหรือเช็คก่อน');
+      todo.push({ c: c, d: d, business: it.business, category: cfg.categories.indexOf(it.category) >= 0 ? it.category : (c.category || 'อื่นๆ'), hasVat: it.hasVat === true });
+    });
+    if (errs.length) return { ok: false, error: 'ยังไม่ได้บันทึก — ' + errs.join(' · '), errors: errs };
+
+    const sum = todo.reduce(function (t, x) { return t + x.c.total; }, 0);
+    const batch = 'PAY' + Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyMMdd-HHmmss');
+    let slip = '';
+    if (req.slip) {
+      const f = getOrCreate_(getOrCreate_(DriveApp.getFolderById(FOLDER_ID), Utilities.formatDate(payD, 'Asia/Bangkok', 'yyyy-MM')), SUB_SLIP);
+      slip = f.createFile(Utilities.newBlob(Utilities.base64Decode(req.slip), req.slipMime || 'image/jpeg',
+        payYmd + '_' + batch + '_' + safeName_(todo[0].c.by) + '_' + sum.toFixed(2) + '.jpg')).getUrl();
+    }
+    const slipCell = slip || (method === 'โอน' ? 'ไม่มีสลิป' : '');
+    const dm = Utilities.formatDate(payD, 'Asia/Bangkok', 'd/M');
+    todo.forEach(function (x) {
+      const c = x.c;
+      // ย้ายรูปใบเสร็จจากโฟลเดอร์รออนุมัติ → ภาษีซื้อ / ใบเสร็จอื่นๆ ของเดือนในใบเสร็จ (ย้ายไม่ได้ก็ไม่เป็นไร ลิงก์เดิมยังใช้ได้)
+      try {
+        const m = /[-\w]{25,}/.exec(c.photo);
+        if (m) DriveApp.getFileById(m[0]).moveTo(getOrCreate_(getOrCreate_(DriveApp.getFolderById(FOLDER_ID), Utilities.formatDate(x.d, 'Asia/Bangkok', 'yyyy-MM')), x.hasVat ? SUB_VAT : SUB_OTHER));
+      } catch (e) {}
+      const note = ['ตั้งเบิก ' + c.id + ' ผู้เบิก ' + c.by, 'จ่ายคืน ' + method + ' ' + dm + ' โดย ' + u.name + (slip ? ' สลิป ' + slip : ''), c.note].filter(Boolean).join(' | ');
+      const expRow = writeExpenseRow_(ss, { d: x.d, business: x.business, category: x.category, items: c.items, total: c.total, hasVat: x.hasVat,
+        vendor: c.vendor, note: note, invNo: c.invNo, taxId: c.taxId, photoUrl: c.photo, source: 'หน้าร้าน' });
+      sh.getRange(c.row, 10, 1, 9).setValues([[CL_PAID, x.business, x.category, method, slipCell, payD, u.name, '', TAB_EXP + ' แถว ' + expRow]]);
+      sh.getRange(c.row, 19).setValue(x.hasVat);
+      sh.getRange(c.row, 23).setValue(batch);
+    });
+    SpreadsheetApp.flush();
+    return { ok: true, count: todo.length, sum: sum, method: method, slip: !!slip, batch: batch };
+  } finally { lock.releaseLock(); }
+}
+
+/* ผู้ดูแลตีกลับ: ต้องมีเหตุผล · พนักงานส่งใหม่ได้ */
+function claimReject_(req, u) {
+  const reason = String(req.reason || '').trim().slice(0, 200);
+  if (!reason) return { ok: false, error: 'ต้องใส่เหตุผลที่ตีกลับ' };
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) return { ok: false, error: 'ระบบกำลังบันทึกรายการอื่น ลองใหม่อีกครั้ง' };
+  try {
+    const sh = claimSheet_(SpreadsheetApp.openById(SHEET_ID));
+    const c = claimRows_(sh).filter(function (x) { return x.id === String(req.id || ''); })[0];
+    if (!c) return { ok: false, error: 'ไม่พบรายการ ' + req.id };
+    if (c.status !== CL_WAIT) return { ok: false, error: req.id + ' สถานะเป็น ' + c.status + ' แล้ว' };
+    sh.getRange(c.row, 10).setValue(CL_REJECT);
+    sh.getRange(c.row, 16, 1, 2).setValues([[u.name, reason]]);
+    return { ok: true, id: c.id };
+  } finally { lock.releaseLock(); }
+}
+
+
+/* ============================================================
+   ริชเมนูชุดผู้ดูแล (6 ปุ่ม) — สร้างผ่าน Messaging API แล้วผูกรายคน · ชุดพนักงาน (3 ปุ่ม) เป็น default ตั้งใน OA Manager
+   ครั้งแรก: ใส่ Script property LINE_OA_TOKEN (Channel access token ของ OA "YH In House") → รัน richMenuAdminSetup 1 ครั้ง
+   หลังจากนั้นระบบผูก/ถอดให้เองตอนคนนั้นเปิดหน้าจดบัญชีหรือตั้งเบิก (whoami) · แก้รูป/ปุ่ม → push รูปใหม่แล้วรัน richMenuAdminSetup อีกครั้ง
+   ริชเมนูที่สร้างทาง API ไม่ขึ้นใน OA Manager และแก้ที่นั่นไม่ได้
+   ============================================================ */
+const RM_IMAGE = 'https://raw.githubusercontent.com/thipwonh-ship-it/yanghaus-liff/main/richmenu/yanghaus-richmenu-admin.jpg';
+const RM_LIFF = { acct: 'https://liff.line.me/2012109669-kGPX1UtI', stock: 'https://liff.line.me/2012109669-qQAVcyBR',
+  claim: 'https://liff.line.me/2012109669-N03WhvLZ', ship: 'https://liff.line.me/2012109669-jTtL2UEr' };
+function rmToken_() { return PropertiesService.getScriptProperties().getProperty('LINE_OA_TOKEN'); }
+function rmFetch_(method, url, opt) {
+  const o = Object.assign({ method: method, headers: { Authorization: 'Bearer ' + rmToken_() }, muteHttpExceptions: true }, opt || {});
+  const res = UrlFetchApp.fetch(url, o);
+  return { code: res.getResponseCode(), text: res.getContentText() };
+}
+function rmLinked_() { return (PropertiesService.getScriptProperties().getProperty('RICHMENU_ADMIN_LINKED') || '').split(',').filter(Boolean); }
+function rmSetLinked_(list) { PropertiesService.getScriptProperties().setProperty('RICHMENU_ADMIN_LINKED', list.join(',')); }
+/* ผูก/ถอดชุดผู้ดูแลให้ตรงกับบทบาทปัจจุบันของคนนี้ (เรียกจาก whoami · ไม่มี token หรือยังไม่ได้ setup = ไม่ทำอะไร) */
+function richMenuSync_(userId, isAdmin) {
+  const id = PropertiesService.getScriptProperties().getProperty('RICHMENU_ADMIN_ID');
+  if (!id || !rmToken_()) return;
+  const linked = rmLinked_(), has = linked.indexOf(userId) >= 0;
+  if (isAdmin && !has) {
+    if (rmFetch_('post', 'https://api.line.me/v2/bot/user/' + userId + '/richmenu/' + id).code === 200) { linked.push(userId); rmSetLinked_(linked); }
+  } else if (!isAdmin && has) {
+    if (rmFetch_('delete', 'https://api.line.me/v2/bot/user/' + userId + '/richmenu').code === 200) rmSetLinked_(linked.filter(function (x) { return x !== userId; }));
+  }
+}
+function allAdminIds_() {
+  const ids = adminIds_(), tab = users_(userSheet_(SpreadsheetApp.openById(SHEET_ID)));
+  Object.keys(tab).forEach(function (k) { if (tab[k].role === ROLE_ADMIN && ids.indexOf(k) < 0) ids.push(k); });
+  return ids;
+}
+/* รันจาก editor: สร้างริชเมนูชุดผู้ดูแลใหม่ (ลบของเดิมที่ระบบนี้สร้าง) แล้วผูกให้ผู้ดูแลทุกคน */
+function richMenuAdminSetup() {
+  if (!rmToken_()) { Logger.log('ยังไม่ได้ใส่ Script property LINE_OA_TOKEN'); return; }
+  const props = PropertiesService.getScriptProperties();
+  const W = 2500, H = 1686, cw = [833, 834, 833], rows = [[0, 928], [928, 758]];
+  const uris = [RM_LIFF.acct, RM_LIFF.stock, RM_LIFF.claim + '?mode=approve', RM_LIFF.ship, RM_LIFF.acct + '?mode=cod', RM_LIFF.acct + '?mode=dash'];
+  const labels = ['จดบัญชี', 'เช็คสต๊อก', 'อนุมัติเบิก', 'ส่งของที่สาขา', 'ส่ง COD', 'รายจ่ายเดือนนี้'];
+  const areas = [];
+  rows.forEach(function (r, ri) { let x = 0; cw.forEach(function (w, ci) {
+    areas.push({ bounds: { x: x, y: r[0], width: w, height: r[1] }, action: { type: 'uri', label: labels[ri * 3 + ci], uri: uris[ri * 3 + ci] } }); x += w; }); });
+  const img = UrlFetchApp.fetch(RM_IMAGE, { muteHttpExceptions: true });
+  if (img.getResponseCode() !== 200) { Logger.log('ดึงรูปไม่ได้ ' + img.getResponseCode() + ' ' + RM_IMAGE); return; }
+  const made = rmFetch_('post', 'https://api.line.me/v2/bot/richmenu', { contentType: 'application/json',
+    payload: JSON.stringify({ size: { width: W, height: H }, selected: true, name: 'YH In House ผู้ดูแล', chatBarText: 'เมนู', areas: areas }) });
+  if (made.code !== 200) { Logger.log('สร้างริชเมนูไม่ได้ ' + made.code + ' ' + made.text); return; }
+  const id = JSON.parse(made.text).richMenuId;
+  const up = rmFetch_('post', 'https://api-data.line.me/v2/bot/richmenu/' + id + '/content', { contentType: 'image/jpeg', payload: img.getBlob().getBytes() });
+  if (up.code !== 200) { Logger.log('อัปโหลดรูปไม่ได้ ' + up.code + ' ' + up.text); rmFetch_('delete', 'https://api.line.me/v2/bot/richmenu/' + id); return; }
+  const admins = allAdminIds_(), ok = [], bad = [];
+  admins.forEach(function (uid) { const r = rmFetch_('post', 'https://api.line.me/v2/bot/user/' + uid + '/richmenu/' + id); (r.code === 200 ? ok : bad).push(uid + (r.code === 200 ? '' : ' (' + r.code + ' ' + r.text + ')')); });
+  const old = props.getProperty('RICHMENU_ADMIN_ID');
+  props.setProperty('RICHMENU_ADMIN_ID', id); rmSetLinked_(ok);
+  if (old && old !== id) rmFetch_('delete', 'https://api.line.me/v2/bot/richmenu/' + old);
+  Logger.log(JSON.stringify({ richMenuId: id, linked: ok.length, failed: bad, note: 'ผูกไม่ได้ = คนนั้นยังไม่ได้แอด OA หรือบล็อกอยู่ · จะผูกให้เองตอนเปิดหน้าครั้งถัดไป' }));
+}
+/* รันจาก editor: เลิกใช้ชุดผู้ดูแล → ทุกคนกลับไปเห็นชุด default ใน OA Manager */
+function richMenuAdminRemove() {
+  const props = PropertiesService.getScriptProperties(), id = props.getProperty('RICHMENU_ADMIN_ID');
+  if (!id || !rmToken_()) { Logger.log('ไม่มีริชเมนูชุดผู้ดูแล หรือยังไม่ได้ใส่ LINE_OA_TOKEN'); return; }
+  const r = rmFetch_('delete', 'https://api.line.me/v2/bot/richmenu/' + id);
+  if (r.code === 200) { props.deleteProperty('RICHMENU_ADMIN_ID'); props.deleteProperty('RICHMENU_ADMIN_LINKED'); }
+  Logger.log('ลบ ' + id + ' → ' + r.code + ' ' + r.text);
+}
+/* รันจาก editor: ดูสถานะ (ไม่แสดงค่า token) */
+function richMenuStatus() {
+  const props = PropertiesService.getScriptProperties();
+  Logger.log(JSON.stringify({ LINE_OA_TOKEN: rmToken_() ? 'มี' : 'ไม่มี', RICHMENU_ADMIN_ID: props.getProperty('RICHMENU_ADMIN_ID') ? 'มี' : 'ไม่มี',
+    linked: rmLinked_().length, admins: allAdminIds_().length, COD_ADMINS: adminIds_().length }));
+}
+
 
 function nextRow_(sh) {
   const a = sh.getRange('A:A').getValues();
@@ -986,6 +1324,12 @@ function testStockCode() {
 
 /* ทดสอบใน editor: เลือก testConfig แล้วกด Run (ครั้งแรกจะขอสิทธิ์) */
 function testConfig() { Logger.log(JSON.stringify(getConfig_())); }
+/* รันจาก editor หลังวางโค้ดรุ่นสิทธิ์/ตั้งเบิก: สร้างแท็บ ผู้ใช้ + ตั้งเบิก ถ้ายังไม่มี แล้วรายงานจำนวน (ไม่แสดง userId) */
+function testRoles() {
+  const ss = SpreadsheetApp.openById(SHEET_ID), us = users_(userSheet_(ss));
+  const n = {}; Object.keys(us).forEach(function (k) { n[us[k].role] = (n[us[k].role] || 0) + 1; });
+  Logger.log(JSON.stringify({ COD_ADMINS: adminIds_().length, 'แท็บผู้ใช้': n, 'แท็บตั้งเบิก': claimRows_(claimSheet_(ss)).length, LINE_CHANNEL_ID: noCid_() ? 'ไม่มี' : 'มี' }));
+}
 
 /* ทดสอบคีย์ + รุ่นโมเดล Gemini โดยไม่ต้องใช้รูป: เลือก testGemini แล้วกด Run ดู Execution log */
 function testGemini() {

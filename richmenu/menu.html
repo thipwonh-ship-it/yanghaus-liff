@@ -1,34 +1,51 @@
-<!doctype html><meta charset="utf-8"><style>
-@font-face{font-family:P;font-weight:700;src:url(fonts/Prompt_700Bold.ttf)}
-@font-face{font-family:P;font-weight:500;src:url(fonts/Prompt_500Medium.ttf)}
+<!doctype html><meta charset="utf-8">
+<!-- ต้นฉบับรูปริชเมนู OA "YH In House" · เปิดด้วย ?set=staff (3 ปุ่ม 2500×843) หรือ ?set=admin (6 ปุ่ม 2500×1686) หรือ ?set=all3 (ชุดเดิม 3 ปุ่ม)
+     สร้างรูป: python3 build.py (ใช้ Chrome headless) · ฟอนต์ Prompt (OFL) อยู่ใน fonts/ -->
+<style>
+@font-face{font-family:P;font-weight:700;src:url(fonts/prompt-thai-700-normal.woff2) format('woff2');unicode-range:U+0E01-0E5B,U+200C-200D,U+25CC}
+@font-face{font-family:P;font-weight:700;src:url(fonts/prompt-latin-700-normal.woff2) format('woff2')}
+@font-face{font-family:P;font-weight:500;src:url(fonts/prompt-thai-500-normal.woff2) format('woff2');unicode-range:U+0E01-0E5B,U+200C-200D,U+25CC}
+@font-face{font-family:P;font-weight:500;src:url(fonts/prompt-latin-500-normal.woff2) format('woff2')}
 *{box-sizing:border-box;margin:0}
-body{width:2500px;height:843px;background:#fcf9e6;font-family:P;position:relative;overflow:hidden}
-.tread{position:absolute;inset:0;opacity:.11}
+body{width:2500px;background:#fcf9e6;font-family:P;position:relative;overflow:hidden}
+.tread{position:absolute;left:0;top:0;width:2500px;height:170px;opacity:.11}
 .band{position:absolute;left:0;top:0;width:2500px;height:170px;display:flex;align-items:center;gap:28px;padding:0 60px}
-.band img{height:130px;}
+.band img{height:130px}
 .band .w{font-weight:700;font-size:74px;letter-spacing:2px;color:#1f663a}
 .band .w span{color:#88a577}
 .band .s{font-weight:500;font-size:46px;color:#347442;margin-left:auto}
-.row{position:absolute;left:0;top:170px;width:2500px;height:673px;display:flex}
-.cell{width:833.33px;height:100%;padding:8px 22px 40px}
-.cell:first-child{padding-left:44px}.cell:last-child{padding-right:44px}
+.grid{position:absolute;left:0;top:170px;width:2500px;display:flex;flex-wrap:wrap}
+.cell{width:833.33px;height:673px;padding:8px 22px 40px}
+.two .cell{height:758px;padding:8px 22px 30px}
+.cell:nth-child(3n+1){padding-left:44px}.cell:nth-child(3n){padding-right:44px}
 .btn{height:100%;border-radius:56px;background:#f3edd3;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;border:7px solid #347442}
-.btn.new{background:#fffff5}
 .btn svg{width:250px;height:250px}
 .t{font-weight:700;font-size:112px;line-height:1.15;color:#1f663a}
 .d{font-weight:500;font-size:50px;color:#5d7f55}
-.new .t{color:#1f663a}.new .d{color:#347442}
 </style>
-<svg class="tread" viewBox="0 0 2500 843"><defs><pattern id="p" width="150" height="110" patternUnits="userSpaceOnUse" patternTransform="rotate(-35)"><path d="M10 10h55l18 40h-55zM85 60h55l-18 40h-55z" fill="#347442"/></pattern></defs><rect width="2500" height="170" fill="url(#p)"/></svg>
-<div class="band"><img src="logo.png"><div class="w">YANG<span>HAUS</span></div><div class="s">ยางเฮ้าส์ · ทีมงาน</div></div>
-<div class="row">
- <div class="cell"><div class="btn">
-  <svg viewBox="0 0 100 100" fill="none" stroke="#1f663a" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"><path d="M50 12 86 30v40L50 88 14 70V30z"/><path d="M14 30l36 18 36-18M50 48v40M32 21l36 18v14"/></svg>
-  <div class="t">ส่งของที่สาขา</div><div class="d">สแกน + ถ่ายรูปพัสดุ</div></div></div>
- <div class="cell"><div class="btn">
-  <svg viewBox="0 0 100 100" fill="none" stroke="#1f663a" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"><path d="M24 12h52v76l-9-7-9 7-8-7-8 7-9-7-9 7z"/><path d="M36 32h28M36 46h28M36 60h16"/></svg>
-  <div class="t">จดบัญชี</div><div class="d">ใบเสร็จ · ซื้อ · ขาย</div></div></div>
- <div class="cell"><div class="btn">
-  <svg viewBox="0 0 100 100" fill="none" stroke="#1f663a" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"><circle cx="42" cy="44" r="30"/><circle cx="42" cy="44" r="13"/><path d="M42 14v17M42 57v17M12 44h17M55 44h17M21 23l12 12M51 53l12 12M63 23 51 35M33 53 21 65" stroke-width="3.5"/><path d="M66 68l22 22" stroke-width="9"/></svg>
-  <div class="t">เช็คสต๊อก</div><div class="d">ล้อแม็ก · ยาง เจสตาร์</div></div></div>
-</div>
+<svg class="tread" viewBox="0 0 2500 170"><defs><pattern id="p" width="150" height="110" patternUnits="userSpaceOnUse" patternTransform="rotate(-35)"><path d="M10 10h55l18 40h-55zM85 60h55l-18 40h-55z" fill="#347442"/></pattern></defs><rect width="2500" height="170" fill="url(#p)"/></svg>
+<div class="band"><img src="logo.png"><div class="w">YANG<span>HAUS</span></div><div class="s" id="sub"></div></div>
+<div class="grid" id="grid"></div>
+<script>
+const S = 'fill="none" stroke="#1f663a" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"';
+const B = {
+  ship:   ['ส่งของที่สาขา', 'สแกน + ถ่ายรูปพัสดุ', '<path d="M50 12 86 30v40L50 88 14 70V30z"/><path d="M14 30l36 18 36-18M50 48v40M32 21l36 18v14"/>'],
+  acct:   ['จดบัญชี', 'ใบเสร็จ · ซื้อ · ขาย', '<path d="M24 12h52v76l-9-7-9 7-8-7-8 7-9-7-9 7z"/><path d="M36 32h28M36 46h28M36 60h16"/>'],
+  stock:  ['เช็คสต๊อก', 'ล้อแม็ก · ยาง เจสตาร์', '<circle cx="42" cy="44" r="30"/><circle cx="42" cy="44" r="13"/><path d="M42 14v17M42 57v17M12 44h17M55 44h17M21 23l12 12M51 53l12 12M63 23 51 35M33 53 21 65" stroke-width="3.5"/><path d="M66 68l22 22" stroke-width="9"/>'],
+  cod:    ['ส่ง COD', 'ใบปะหน้า + ใบเสร็จขนส่ง', '<rect x="10" y="28" width="80" height="48" rx="6"/><circle cx="50" cy="52" r="12"/><path d="M22 40v24M78 40v24" stroke-width="3.5"/>'],
+  claim:  ['ตั้งเบิก', 'สำรองจ่าย · ถ่ายใบเสร็จ', '<path d="M18 30h58a8 8 0 0 1 8 8v40a8 8 0 0 1-8 8H24a8 8 0 0 1-8-8V26a8 8 0 0 1 8-8h44v12"/><path d="M84 50H66a8 8 0 0 0 0 16h18"/><circle cx="67" cy="58" r="1.5" stroke-width="4"/>'],
+  approve:['อนุมัติเบิก', 'ตรวจใบเสร็จ · จ่ายคืน', '<path d="M30 16h40v10H30z"/><path d="M30 20H20v68h60V20H70"/><path d="M34 58l11 11 22-24" stroke-width="6.5"/>'],
+  dash:   ['รายจ่ายเดือนนี้', 'สรุปซื้อ · ค่าใช้จ่าย · COD', '<path d="M14 86h72"/><rect x="20" y="52" width="14" height="34"/><rect x="43" y="32" width="14" height="54"/><rect x="66" y="14" width="14" height="72"/>'],
+};
+const SETS = {
+  all3:  { sub: 'ยางเฮ้าส์ · ทีมงาน', keys: ['ship', 'acct', 'stock'] },
+  staff: { sub: 'ยางเฮ้าส์ · ทีมงาน', keys: ['ship', 'cod', 'claim'] },
+  admin: { sub: 'ยางเฮ้าส์ · ผู้ดูแล', keys: ['acct', 'stock', 'approve', 'ship', 'cod', 'dash'] },
+};
+const set = SETS[new URLSearchParams(location.search).get('set')] || SETS.staff;
+const two = set.keys.length > 3;
+document.body.style.height = (two ? 1686 : 843) + 'px';
+document.getElementById('sub').textContent = set.sub;
+const g = document.getElementById('grid'); g.className = 'grid' + (two ? ' two' : '');
+g.innerHTML = set.keys.map(k => `<div class="cell"><div class="btn"><svg viewBox="0 0 100 100" ${S}>${B[k][2]}</svg><div class="t">${B[k][0]}</div><div class="d">${B[k][1]}</div></div></div>`).join('');
+</script>
