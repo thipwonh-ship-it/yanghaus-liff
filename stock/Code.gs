@@ -125,10 +125,17 @@ function data_(u, kind) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sh = ss.getSheetByName(KIND_TAB[kind]);
   if (!sh) return { ok: false, error: 'ไม่พบแท็บ ' + KIND_TAB[kind] };
-  const lastR = sh.getLastRow(), lastC = sh.getLastColumn();
+  // อ่านใต้ lock เดียวกับตอนอัปโหลด กันอ่านเจอแท็บครึ่ง ๆ กลาง ๆ ระหว่างที่อีกคนกำลังเขียนทับ
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) return { ok: false, error: 'ระบบกำลังอัปเดตไฟล์อยู่ ลองใหม่อีกครั้ง' };
+  let v = null, meta = null;
+  try {
+    const lastR = sh.getLastRow(), lastC = sh.getLastColumn();
+    if (lastR >= 2 && lastC > STOCK_HEAD.length) v = sh.getRange(1, 1, lastR, lastC).getValues();
+    meta = meta_(ss, kind);
+  } finally { lock.releaseLock(); }
   let branches = [], items = [];
-  if (lastR >= 2 && lastC > STOCK_HEAD.length) {
-    const v = sh.getRange(1, 1, lastR, lastC).getValues();
+  if (v) {
     let head = v[0].map(function (h) { return String(h || '').trim(); });
     let end = head.length;
     while (end > 0 && (!head[end - 1] || head[end - 1] === 'รวม')) end--;       // ตัดคอลัมน์ "รวม" และคอลัมน์ว่างท้ายตาราง
@@ -141,7 +148,7 @@ function data_(u, kind) {
       items.push([String(r[0]), String(r[1]), String(r[2]), q]);
     }
   }
-  return { ok: true, kind: kind, meta: meta_(ss, kind), branches: branches, items: items, photos: kind === 'wheel' ? photos_(ss) : { urls: [], map: {} }, canUpload: u.role === ROLE_UPLOAD, name: u.name };
+  return { ok: true, kind: kind, meta: meta, branches: branches, items: items, photos: kind === 'wheel' ? photos_(ss) : { urls: [], map: {} }, canUpload: u.role === ROLE_UPLOAD, name: u.name };
 }
 
 /* แท็บรูปสินค้า → {urls:[...], map:{รหัส:[[ชื่อรูป, index ของ url, มีใน Shopee 0/1], ...]}} (url ซ้ำกันเยอะ เก็บครั้งเดียว) */
