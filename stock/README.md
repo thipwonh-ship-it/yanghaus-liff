@@ -40,6 +40,8 @@
    - ผลสำเร็จ/ไม่สำเร็จค้างบนจอจนกด × · ไม่สำเร็จ = ข้อมูลเดิมยังอยู่
 
 ## ติดตั้งครั้งแรก
+> สถานะ 24 พ.ย. 2026: ทำข้อ 1–6 และ 8 แล้ว (Apps Script project "YANG Haus Stock" Version 1, LIFF `2012109669-qQAVcyBR`, ริชเมนู 3 ปุ่ม) · เหลือข้อ 7 + ทดสอบบน LINE จริง
+
 1. เปิดชีท **YANG Haus สต๊อกเจสตาร์** → ส่วนขยาย → Apps Script → วาง `Code.gs` ทั้งไฟล์ → บันทึก
 2. Project Settings → Script properties → เพิ่ม `LINE_CHANNEL_ID` = Channel ID ของ "YH ขนส่ง Login" (ค่าเดียวกับระบบจดบัญชี)
 3. รันฟังก์ชัน `testConfig` 1 ครั้ง (กดอนุญาตสิทธิ์ Sheet/Drive) → Log ต้องขึ้น มี ทุกตัว
