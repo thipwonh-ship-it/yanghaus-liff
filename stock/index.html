@@ -36,6 +36,7 @@
   .btn:disabled{opacity:.5}
 
   .msg{border-radius:12px;padding:12px 14px;margin-top:10px;display:flex;gap:10px;align-items:flex-start;border:1px solid;font-size:15px}
+  .sync{font-size:13px;color:#6b6b63;margin-top:8px;padding:0 2px}
   .msg.ok{background:var(--ok-bg);color:var(--ok);border-color:#b9d8b7}
   .msg.err{background:var(--err-bg);color:var(--err);border-color:#eeb8b1}
   .msg.wait{background:var(--warn-bg);color:var(--warn);border-color:#ecd28f}
@@ -133,6 +134,7 @@
       <div class="acts"><button class="btn alt" type="button" id="cCancel">ยกเลิก</button><button class="btn" type="button" id="cSave">บันทึกให้ทุกคน</button></div>
     </div>
 
+    <div id="sync" class="sync hide"></div>
     <div id="msgs"></div>
 
     <div class="searchbar">
@@ -150,9 +152,8 @@
 </div>
 
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const PAGE_VERSION = '2026-11-24d';
+const PAGE_VERSION = '2026-11-24e';
 /* ====== ค่าที่ต้องตั้ง (ดู README) ====== */
 const LIFF_ID = '2012109669-qQAVcyBR';   // LIFF app "YH เช็คสต๊อก" ใน channel "YH ขนส่ง Login"
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwsSYFin05poiElao9-75R2BrYEXoX0cCU7p1m6uDKfmQ5MMrXhb7eZJZI_L5UFpOQ/exec';   // Web app URL ของ Apps Script ที่ผูกกับชีท "YANG Haus สต๊อกเจสตาร์"
@@ -165,7 +166,8 @@ const DROP_WARN = 0.2;   // รายการหายเกิน 20% จา�
 
 const TH = {"ดำ":"black","ด้าน":"matt","เทา":"gunmetal","ขาว":"white","เงิน":"silver","บรอนซ์":"bronze","ทอง":"gold","แดง":"red","น้ำเงิน":"blue","ฟ้า":"blue","เขียว":"green","ส้ม":"orange","ม่วง":"purple","ขอบ":""};
 const $ = id => document.getElementById(id);
-let idToken = '', me = null, kind = KINDS[0], DATA = null, size = '', timer = 0, pending = null, busy = false, savedNote = '';
+let idToken = '', sub = '', me = null, kind = KINDS[0], DATA = null, size = '', timer = 0, pending = null, busy = false, savedNote = '', loadSeq = 0;
+const XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 function show(id) { ['vLoad', 'vDenied', 'vErr', 'vMain'].forEach(v => $(v).classList.toggle('hide', v !== id)); }
@@ -192,38 +194,65 @@ async function init() {
     if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
     idToken = liff.getIDToken() || '';
   } catch (e) { return fail('เชื่อมต่อ LINE ไม่ได้: ' + e); }
-  $('loadNote').textContent = 'ตรวจสิทธิ์';
-  me = await post({ action: 'whoami', idToken });
-  if (!me.ok) {
-    if (me.code === 'auth' && relogin()) return;
-    return fail(me.error || 'ตรวจสิทธิ์ไม่ได้');
-  }
+  try { sub = (liff.getDecodedIDToken() || {}).sub || ''; } catch (e) { sub = ''; }
+  await loadData();
+}
+
+/* ---------- จำข้อมูลไว้ในเครื่อง: เปิดครั้งถัดไปเห็นทันที แล้วเช็คกับหลังบ้านตามหลัง (หลังบ้านยังตรวจสิทธิ์ทุกครั้ง) ---------- */
+function ckey(k) { return 'yhstock:' + sub + ':' + k; }
+function cget(k) { if (!sub) return null; try { const c = JSON.parse(localStorage.getItem(ckey(k)) || 'null'); return c && c.ver && c.me && c.me.userId === sub ? c : null; } catch (e) { return null; } }
+function cset(k, c) { if (!sub) return; try { localStorage.setItem(ckey(k), JSON.stringify(c)); } catch (e) {} }
+function cclear() { try { Object.keys(localStorage).filter(x => x.indexOf('yhstock:') === 0).forEach(x => localStorage.removeItem(x)); } catch (e) {} }
+function loadXlsx() {
+  if (window.XLSX) return Promise.resolve();
+  return new Promise((ok, no) => { const sc = document.createElement('script'); sc.src = XLSX_URL; sc.onload = ok; sc.onerror = () => no(new Error('โหลดตัวอ่าน Excel ไม่ได้ เช็คเน็ตแล้วลองใหม่')); document.head.appendChild(sc); });
+}
+function sync(text) { $('sync').textContent = text || ''; $('sync').classList.toggle('hide', !text); }
+
+function applyMe(m) {
+  me = m;
   $('who').textContent = me.name || '';
   $('uid').textContent = me.userId || '';
-  if (!me.canView) {
-    $('deniedId').textContent = (me.name ? me.name + ' · ' : '') + me.userId;
-    if (me.role === 'ปิด') $('deniedNote').textContent = 'บัญชีนี้ถูกปิดสิทธิ์';
-    return show('vDenied');
-  }
   $('uplBtn').classList.toggle('hide', !me.canUpload);
   if (KINDS.length > 1) {
     $('kinds').classList.remove('hide');
     $('kinds').innerHTML = KINDS.map(k => `<button type="button" data-k="${k.key}" class="${k === kind ? 'on' : ''}">${esc(k.label)}</button>`).join('');
   }
-  await loadData();
+}
+function applyData(r, keep) {
+  DATA = { meta: r.meta, branches: r.branches || [], photos: r.photos || { urls: [], map: {} }, items: (r.items || []).map(a => ({ s: a[0], c: a[1], n: a[2], q: a[3] })) };
+  if (!keep) { size = ''; $('q').value = ''; }
+  $('q').placeholder = kind.hint;
+  build();
+  if (size && !DATA.items.some(i => i.s === size)) { size = ''; build(); }
+  renderStatus(); render(); show('vMain');
+}
+function denied(r) {
+  cclear(); me = null; DATA = null;
+  $('uid').textContent = r.userId || '';
+  $('deniedId').textContent = (r.name ? r.name + ' · ' : '') + (r.userId || '');
+  if (r.role === 'ปิด') $('deniedNote').textContent = 'บัญชีนี้ถูกปิดสิทธิ์';
+  show('vDenied');
 }
 
 async function loadData() {
-  $('loadNote').textContent = 'โหลดสต๊อก' + kind.label;
-  show('vLoad');
-  const r = await post({ action: 'data', kind: kind.key, idToken });
+  const seq = ++loadSeq, k = kind, c = cget(k.key);
+  if (c) { applyMe(c.me); applyData(c, false); sync('กำลังเช็คข้อมูลล่าสุด…'); }
+  else { $('loadNote').textContent = 'ตรวจสิทธิ์ + โหลดสต๊อก' + k.label; show('vLoad'); }
+  const r = await post({ action: 'data', kind: k.key, idToken, have: c ? c.ver : '' });
+  if (seq !== loadSeq) return;          // ผู้ใช้สลับชุดไปแล้ว ทิ้งคำตอบเก่า
+  sync('');
   if (!r.ok) {
-    if (r.code === 'auth' && relogin()) return;
+    if (r.code === 'role') return denied(r);
+    if (r.code === 'auth') { if (relogin()) return; cclear(); return fail(r.error || 'ตรวจสิทธิ์ไม่ได้'); }
+    if (c) return sync('เชื่อมต่อหลังบ้านไม่ได้ · กำลังแสดงข้อมูลที่จำไว้ในเครื่อง (' + (c.meta ? c.meta.at : '-') + ')');
     return fail(savedNote + (r.error || 'โหลดข้อมูลไม่ได้'), loadData);
   }
-  DATA = { meta: r.meta, branches: r.branches || [], photos: r.photos || { urls: [], map: {} }, items: (r.items || []).map(a => ({ s: a[0], c: a[1], n: a[2], q: a[3] })) };
-  size = ''; $('q').value = ''; $('q').placeholder = kind.hint;
-  build(); renderStatus(); render(); show('vMain');
+  applyMe(r.me);
+  if (r.same && c) { c.me = r.me; cset(k.key, c); return; }
+  const keep = !!c;
+  cset(k.key, { ver: r.ver, me: r.me, meta: r.meta, branches: r.branches, photos: r.photos, items: r.items });
+  applyData(r, keep);
 }
 
 /* ---------- ค้นหา ---------- */
@@ -335,7 +364,7 @@ async function pick(file) {
   $('confirm').classList.add('hide'); pending = null;
   if (!/\.xlsx?$/i.test(file.name)) return msg('err', 'ไม่ใช่ไฟล์ Excel', file.name + ' · ต้องเป็น .xlsx หรือ .xls ข้อมูลเดิมยังอยู่');
   let d, u8;
-  try { u8 = new Uint8Array(await file.arrayBuffer()); d = kind.parse(XLSX.read(u8, { type: 'array' })); }
+  try { await loadXlsx(); u8 = new Uint8Array(await file.arrayBuffer()); d = kind.parse(XLSX.read(u8, { type: 'array' })); }
   catch (e) { return msg('err', 'อ่านไฟล์ไม่ได้ ยังไม่ได้บันทึก', (e && e.message || e) + ' · ข้อมูลเดิมยังอยู่'); }
   const inStock = d.items.filter(it => it[3].reduce((a, b) => a + b, 0) > 0).length;
   const m = DATA.meta, warns = [];
