@@ -31,7 +31,7 @@ function doPost(e) {
     const req = JSON.parse(e.postData.contents || '{}');
     switch (req.action) {
       case 'whoami': return json_(whoami_(req.idToken));
-      case 'data':   { const u = requireRole_(req.idToken, false); return json_(u.ok ? data_(u, req.kind) : u); }
+      case 'data':   { const u = requireRole_(req.idToken, false); return json_(u.ok ? data_(u, req.kind, req.have) : u); }
       case 'upload': { const u = requireRole_(req.idToken, true);  return json_(u.ok ? upload_(req, u) : u); }
       default:       return json_({ ok: false, error: 'unknown action' });
     }
@@ -41,14 +41,23 @@ function doPost(e) {
 }
 
 /* ---------- สิทธิ์ ---------- */
+/* ตรวจ ID token กับ LINE · จำผลไว้ใน cache (ไม่เกิน 10 นาที และไม่เกินอายุ token) เพื่อไม่ต้องยิง LINE ซ้ำทุกคำขอ */
 function verifyLine_(idToken) {
   const cid = PropertiesService.getScriptProperties().getProperty('LINE_CHANNEL_ID');
   if (!idToken || !cid) return null;
+  const cache = CacheService.getScriptCache();
+  const key = 'v:' + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, cid + '|' + idToken));
+  const hit = cache.get(key);
+  if (hit) { try { return JSON.parse(hit); } catch (e) {} }
   const res = UrlFetchApp.fetch('https://api.line.me/oauth2/v2.1/verify', {
     method: 'post', payload: { id_token: idToken, client_id: cid }, muteHttpExceptions: true });
   if (res.getResponseCode() !== 200) return null;
   const j = JSON.parse(res.getContentText());
-  return { userId: j.sub, name: j.name || '' };
+  if (!j.sub) return null;
+  const u = { userId: j.sub, name: j.name || '' };
+  const left = j.exp ? Math.floor(Number(j.exp) - Date.now() / 1000) - 5 : 300;
+  if (left > 10) { try { cache.put(key, JSON.stringify(u), Math.min(600, left)); } catch (e) {} }
+  return u;
 }
 
 /* อ่านแท็บผู้ใช้ → {userId: {row, name, role}} */
@@ -95,7 +104,7 @@ function requireRole_(idToken, needUpload) {
   if (!u) return authFail_();
   const role = roleOf_(u);
   const ok = needUpload ? role === ROLE_UPLOAD : (role === ROLE_UPLOAD || role === ROLE_VIEW);
-  if (!ok) return { ok: false, code: 'role', error: needUpload ? 'บัญชีนี้ไม่มีสิทธิ์อัปโหลด' : 'บัญชีนี้ยังไม่ได้รับสิทธิ์ดูสต๊อก', userId: u.userId };
+  if (!ok) return { ok: false, code: 'role', error: needUpload ? 'บัญชีนี้ไม่มีสิทธิ์อัปโหลด' : 'บัญชีนี้ยังไม่ได้รับสิทธิ์ดูสต๊อก', userId: u.userId, name: u.name, role: role };
   return { ok: true, userId: u.userId, name: u.name, role: role };
 }
 
@@ -119,7 +128,7 @@ function thaiTime_(d) {
   return p[0] + ' ' + TH_MONTH[+p[1] - 1] + ' ' + String((+p[2] + 543) % 100) + ' ' + p[3];
 }
 
-function data_(u, kind) {
+function data_(u, kind, have) {
   kind = kind || 'wheel';
   if (!KIND_TAB[kind]) return { ok: false, error: 'ไม่รู้จักชุดข้อมูล ' + kind };
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -148,7 +157,12 @@ function data_(u, kind) {
       items.push([String(r[0]), String(r[1]), String(r[2]), q]);
     }
   }
-  return { ok: true, kind: kind, meta: meta, branches: branches, items: items, photos: kind === 'wheel' ? photos_(ss) : { urls: [], map: {} }, canUpload: u.role === ROLE_UPLOAD, name: u.name };
+  const photos = kind === 'wheel' ? photos_(ss) : { urls: [], map: {} };
+  const me = { userId: u.userId, name: u.name, role: u.role, canView: true, canUpload: u.role === ROLE_UPLOAD };
+  // ver = ลายนิ้วมือของข้อมูลทั้งชุด · ถ้าตรงกับที่เครื่องผู้ใช้จำไว้ (have) ตอบสั้น ๆ ว่า same ไม่ต้องส่งข้อมูลซ้ำ
+  const ver = Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify([meta, branches, items, photos]), Utilities.Charset.UTF_8));
+  if (have && have === ver) return { ok: true, kind: kind, same: true, ver: ver, meta: meta, me: me };
+  return { ok: true, kind: kind, ver: ver, meta: meta, branches: branches, items: items, photos: photos, me: me };
 }
 
 /* แท็บรูปสินค้า → {urls:[...], map:{รหัส:[[ชื่อรูป, index ของ url, มีใน Shopee 0/1], ...]}} (url ซ้ำกันเยอะ เก็บครั้งเดียว) */
